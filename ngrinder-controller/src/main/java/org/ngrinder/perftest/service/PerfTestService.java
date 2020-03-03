@@ -16,7 +16,6 @@ package org.ngrinder.perftest.service;
 import com.google.common.collect.Lists;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-
 import net.grinder.SingleConsole;
 import net.grinder.StopReason;
 import net.grinder.common.GrinderProperties;
@@ -25,7 +24,6 @@ import net.grinder.console.model.ConsoleProperties;
 import net.grinder.util.ConsolePropertiesFactory;
 import net.grinder.util.Directory;
 import net.grinder.util.Pair;
-
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -65,7 +63,6 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
-
 import java.io.*;
 import java.util.*;
 import java.util.Map.Entry;
@@ -655,12 +652,12 @@ public class PerfTestService extends AbstractPerfTestService implements Controll
 	}
 
 	public GrinderProperties prepareTest(PerfTest perfTest) {
-		cleanupPerftestDistibutionFolder(perfTest);
+		cleanUpPerftestDistributionFolder(perfTest);
 		ScriptHandler prepareDistribution = prepareDistribution(perfTest);
 		return getGrinderProperties(perfTest, prepareDistribution);
 	}
 
-	private void cleanupPerftestDistibutionFolder(PerfTest perfTest) {
+	private void cleanUpPerftestDistributionFolder(PerfTest perfTest) {
 		File distributedFolder = config.getHome().getDistributedFolderName(perfTest.getId().toString());
 		if (distributedFolder.exists()) {
 			FileUtils.deleteQuietly(distributedFolder);

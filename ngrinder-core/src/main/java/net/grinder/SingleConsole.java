@@ -105,7 +105,7 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 	private long startTime = 0;
 	private long momentWhenTpsBeganToHaveVerySmall;
 	private long lastMomentWhenErrorsMoreThanHalfOfTotalTPSValue;
-	private final ListenerSupport<ConsoleShutdownListener> showdownListner = ListenerHelper.create();
+	private final ListenerSupport<ConsoleShutdownListener> shutdownListener = ListenerHelper.create();
 	private final ListenerSupport<SamplingLifeCycleListener> samplingLifeCycleListener = ListenerHelper.create();
 	private final ListenerSupport<SamplingLifeCycleFollowUpListener> samplingLifeCycleFollowupListener = ListenerHelper
 			.create();
@@ -1010,7 +1010,7 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 	 * @see ConsoleShutdownListener
 	 */
 	public ListenerSupport<ConsoleShutdownListener> getListeners() {
-		return this.showdownListner;
+		return this.shutdownListener;
 	}
 
 	/**
@@ -1020,7 +1020,7 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 	 * @param listener listener to be registered.
 	 */
 	public void addListener(ConsoleShutdownListener listener) {
-		showdownListner.add(listener);
+		shutdownListener.add(listener);
 	}
 
 	/**
