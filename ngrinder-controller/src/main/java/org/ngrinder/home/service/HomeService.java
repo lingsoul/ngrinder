@@ -1,4 +1,4 @@
-/* 
+/*
  * Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
  *  You may obtain a copy of the License at
@@ -9,7 +9,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License. 
+ * limitations under the License.
  */
 package org.ngrinder.home.service;
 
@@ -35,6 +35,8 @@ import static org.ngrinder.common.constant.CacheConstants.CACHE_LEFT_PANEL_ENTRI
 import static org.ngrinder.common.constant.CacheConstants.CACHE_RIGHT_PANEL_ENTRIES;
 import static org.ngrinder.common.util.TypeConvertUtils.cast;
 
+import java.io.File;
+import java.net.MalformedURLException;
 /**
  * nGrinder index page data retrieval service.
  *
@@ -92,11 +94,15 @@ public class HomeService {
 		HttpURLConnection feedConnection = null;
 		try {
 			List<PanelEntry> panelEntries = new ArrayList<>();
-			URL url = new URL(feedURL);
-			feedConnection = (HttpURLConnection) url.openConnection();
-			feedConnection.setConnectTimeout(8000);
-			feedConnection.setReadTimeout(8000);
-			reader = new XmlReader(feedConnection);
+			if(feedURL.contains("local")){
+				reader = new XmlReader(getXmlToUrl(feedURL));
+			}else {
+				URL url = new URL(feedURL);
+				feedConnection = (HttpURLConnection) url.openConnection();
+				feedConnection.setConnectTimeout(8000);
+				feedConnection.setReadTimeout(8000);
+				reader = new XmlReader(feedConnection);
+			}
 			SyndFeed feed = input.build(reader);
 			int count = 0;
 
@@ -150,4 +156,17 @@ public class HomeService {
 		return StringUtils.startsWith(uri, "https://github.com") && StringUtils.contains(uri, "/wiki/");
 	}
 
+	private URL getXmlToUrl(String envUrl) throws MalformedURLException {
+		String fileName = "ngrinder-user-cn-f114.xml";
+		if("local.en".equals(envUrl)){
+			fileName = "ngrinder-user-en-f50.xml";
+		}else if("local.kr".equals(envUrl)){
+			fileName = "ngrinder-user-kr-f113.xml";
+		}else if("local.wiki".equals(envUrl)){
+			fileName = "wiki.atom";
+		}
+		String path = HomeService.class.getResource("/localXmlFiles/").getPath()  + fileName;
+		File file = new File(path);
+		return file.toURI().toURL();
+	}
 }
