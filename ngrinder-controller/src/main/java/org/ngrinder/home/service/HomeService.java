@@ -1,4 +1,4 @@
-/* 
+/*
  * Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
  *  You may obtain a copy of the License at
@@ -9,7 +9,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License. 
+ * limitations under the License.
  */
 package org.ngrinder.home.service;
 
@@ -34,7 +34,8 @@ import java.util.*;
 import static org.ngrinder.common.constant.CacheConstants.CACHE_LEFT_PANEL_ENTRIES;
 import static org.ngrinder.common.constant.CacheConstants.CACHE_RIGHT_PANEL_ENTRIES;
 import static org.ngrinder.common.util.TypeConvertUtils.cast;
-
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 /**
  * nGrinder index page data retrieval service.
  *
@@ -48,6 +49,9 @@ public class HomeService {
 	private static final Logger LOG = LoggerFactory.getLogger(HomeService.class);
 
 	private final UserDefinedMessageSource userDefinedMessageSource;
+
+	@Autowired
+	Environment environment;
 
 	/**
 	 * Get the let panel entries from the given feed RUL.
@@ -92,6 +96,9 @@ public class HomeService {
 		HttpURLConnection feedConnection = null;
 		try {
 			List<PanelEntry> panelEntries = new ArrayList<>();
+			if(feedURL.contains("local")){
+				feedURL = getXmlUrl(feedURL);
+			}
 			URL url = new URL(feedURL);
 			feedConnection = (HttpURLConnection) url.openConnection();
 			feedConnection.setConnectTimeout(8000);
@@ -150,4 +157,16 @@ public class HomeService {
 		return StringUtils.startsWith(uri, "https://github.com") && StringUtils.contains(uri, "/wiki/");
 	}
 
+	private String getXmlUrl(String feedURL) {
+		String fileName = "ngrinder-user-cn-f114.xml";
+		if("local.wiki".equals(feedURL)){
+			fileName = "wiki.atom";
+		}
+		String xmlUrl = "http://127.0.0.1:" + getPort() + "/home/api/getXml?xmlName=" + fileName;
+		return xmlUrl;
+	}
+
+	public String getPort(){
+		return environment.getProperty("local.server.port");
+	}
 }

@@ -2,6 +2,9 @@ ngrinder:
   version: 3.5.0-SNAPSHOT
 
 server:
+  compression:
+    enabled: true
+    mime-types: application/javascript,text/css,application/json,application/xml,text/html,text/xml,text/plain
   default-encoding: UTF-8
   servlet:
     session:
