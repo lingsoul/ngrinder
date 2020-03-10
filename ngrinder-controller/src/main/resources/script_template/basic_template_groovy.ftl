@@ -23,6 +23,9 @@ import HTTPClient.CookieModule
 import HTTPClient.HTTPResponse
 import HTTPClient.NVPair
 
+import ch.qos.logback.classic.Level
+import org.slf4j.LoggerFactory
+
 /**
  * A simple example using the HTTP plugin that shows the retrieval of a
  * single page via HTTP. 
@@ -89,6 +92,8 @@ class TestRunner {
 
 	@BeforeThread 
 	public void beforeThread() {
+		//You can use this if you want to set the log level.
+		//LoggerFactory.getLogger("worker").setLevel(Level.ERROR)
 		test.record(this, "test")
 		grinder.statistics.delayReports=true;
 		grinder.logger.info("before thread.");
@@ -105,10 +110,11 @@ class TestRunner {
 	public void test(){
 		HTTPResponse result = request.${method?default("GET")}("${url}", <#if body??>body.getBytes()<#else>params</#if>)
 
-		if (result.statusCode == 301 || result.statusCode == 302) {
-			grinder.logger.warn("Warning. The response may not be correct. The response code was {}.", result.statusCode); 
+		if (result.statusCode == 200) {
+			grinder.statistics.forCurrentTest.success = 1;
 		} else {
-			assertThat(result.statusCode, is(200));
+			grinder.logger.error("Error code:[{}],msg:{}.", result.statusCode,result.text);
+			grinder.statistics.forCurrentTest.success = 0;
 		}
 	}
 }
