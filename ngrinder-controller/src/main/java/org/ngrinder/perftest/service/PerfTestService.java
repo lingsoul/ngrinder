@@ -71,12 +71,14 @@ import static java.util.stream.Collectors.toList;
 import static org.ngrinder.common.constant.CacheConstants.*;
 import static org.ngrinder.common.constants.MonitorConstants.MONITOR_FILE_PREFIX;
 import static org.ngrinder.common.util.AccessUtils.getSafe;
+import static org.ngrinder.common.util.AopUtils.proxy;
 import static org.ngrinder.common.util.CollectionUtils.*;
 import static org.ngrinder.common.util.ExceptionUtils.processException;
 import static org.ngrinder.common.util.NoOp.noOp;
 import static org.ngrinder.common.util.Preconditions.checkNotEmpty;
 import static org.ngrinder.common.util.Preconditions.checkNotNull;
 import static org.ngrinder.common.util.TypeConvertUtils.cast;
+import static org.ngrinder.model.Status.PREPARE_DISTRIBUTION;
 import static org.ngrinder.model.Status.getProcessingOrTestingTestStatus;
 import static org.ngrinder.perftest.repository.PerfTestSpecification.*;
 
@@ -652,9 +654,14 @@ public class PerfTestService extends AbstractPerfTestService implements Controll
 	}
 
 	public GrinderProperties prepareTest(PerfTest perfTest) {
+		proxy(this).markStatusAndProgress(perfTest,
+			PREPARE_DISTRIBUTION, "Distribution files are being prepared.");
 		cleanUpPerftestDistributionFolder(perfTest);
 		ScriptHandler prepareDistribution = prepareDistribution(perfTest);
-		return getGrinderProperties(perfTest, prepareDistribution);
+		GrinderProperties grinderProperties = getGrinderProperties(perfTest, prepareDistribution);
+		proxy(this).markStatusAndProgress(perfTest,
+			PREPARE_DISTRIBUTION, "Distribution files are prepared.");
+		return grinderProperties;
 	}
 
 	private void cleanUpPerftestDistributionFolder(PerfTest perfTest) {
