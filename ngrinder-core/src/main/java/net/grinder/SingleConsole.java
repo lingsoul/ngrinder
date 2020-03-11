@@ -28,6 +28,8 @@ import net.grinder.common.processidentity.WorkerProcessReport;
 import net.grinder.console.ConsoleFoundationEx;
 import net.grinder.console.common.Resources;
 import net.grinder.console.common.ResourcesImplementation;
+import net.grinder.console.communication.AcceptMd5Listener;
+import net.grinder.console.communication.ConsoleCommunicationImplementationEx;
 import net.grinder.console.communication.ProcessControl;
 import net.grinder.console.communication.ProcessControl.Listener;
 import net.grinder.console.communication.ProcessControl.ProcessReports;
@@ -35,6 +37,8 @@ import net.grinder.console.distribution.AgentCacheState;
 import net.grinder.console.distribution.FileDistribution;
 import net.grinder.console.distribution.FileDistributionHandler;
 import net.grinder.console.model.*;
+import net.grinder.messages.agent.RefreshCacheMessage;
+import net.grinder.messages.console.AgentAddress;
 import net.grinder.statistics.*;
 import net.grinder.util.*;
 import net.grinder.util.ListenerSupport.Informer;
@@ -61,7 +65,11 @@ import java.io.FileWriter;
 import java.text.DecimalFormat;
 import java.util.*;
 import java.util.Map.Entry;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ForkJoinPool;
 
+
+import static java.util.Arrays.stream;
 import static org.ngrinder.common.util.CollectionUtils.*;
 import static org.ngrinder.common.util.ExceptionUtils.processException;
 import static org.ngrinder.common.util.Preconditions.checkNotNull;
@@ -74,7 +82,7 @@ import static org.ngrinder.common.util.Preconditions.checkNotNull;
  * @author JunHo Yoon (clone Console and modify this for nGrinder)
  * @since 3.0
  */
-public class SingleConsole extends AbstractSingleConsole implements Listener, SampleListener {
+public class SingleConsole extends AbstractSingleConsole implements Listener, SampleListener, AcceptMd5Listener {
 	private static final String RESOURCE_CONSOLE = "net.grinder.console.common.resources.Console";
 	private Thread consoleFoundationThread;
 	private ConsoleFoundationEx consoleFoundation;
@@ -83,9 +91,13 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 
 	private static final String REPORT_CSV = "output.csv";
 	private static final String REPORT_DATA = ".data";
+	private static final int NUM_OF_SEND_MD5_THREAD = 3;
 
 	private final Condition eventSyncCondition = new Condition();
 	private ProcessReports[] processReports;
+
+	// It contains cached distribution files md5 checksum from each agents.
+	private CopyOnWriteArrayList<Set<String>> agentCachedDistFilesMd5List = new CopyOnWriteArrayList<>();
 	private boolean cancel = false;
 
 	// for displaying tps graph in test running page
@@ -97,7 +109,7 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 	private long startTime = 0;
 	private long momentWhenTpsBeganToHaveVerySmall;
 	private long lastMomentWhenErrorsMoreThanHalfOfTotalTPSValue;
-	private final ListenerSupport<ConsoleShutdownListener> showdownListner = ListenerHelper.create();
+	private final ListenerSupport<ConsoleShutdownListener> shutdownListener = ListenerHelper.create();
 	private final ListenerSupport<SamplingLifeCycleListener> samplingLifeCycleListener = ListenerHelper.create();
 	private final ListenerSupport<SamplingLifeCycleFollowUpListener> samplingLifeCycleFollowupListener = ListenerHelper
 			.create();
@@ -173,6 +185,7 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 			consoleProperties.setConsolePort(port);
 			this.consoleFoundation = new ConsoleFoundationEx(RESOURCE, LOGGER, consoleProperties,
 					consoleCommunicationSetting, eventSyncCondition);
+			consoleFoundation.addMd5AcceptListener(this);
 			modelView = getConsoleComponent(SampleModelViews.class);
 			getConsoleComponent(ProcessControl.class).addProcessStatusListener(this);
 		} catch (GrinderException e) {
@@ -349,6 +362,27 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 		return this.getConsoleProperties().getConsoleHost();
 	}
 
+	@Override
+	public void onAcceptMd5Listener(Set<String> md5) {
+		this.agentCachedDistFilesMd5List.add(md5);
+	}
+
+	/**
+	 * Send Md5 of unnecessary files to agents for refresh agent's distribution cache directory.
+	 *
+	 * @param distFilesMd5 Required file's md5 for currently running test
+	 */
+	public void sendDistFilesMd5ToAgents(Set<String> distFilesMd5) {
+		ForkJoinPool myPool = new ForkJoinPool(NUM_OF_SEND_MD5_THREAD);
+		myPool.submit(() -> stream(processReports)
+			.parallel()
+			.forEach(processReport -> getConsoleComponent(ConsoleCommunicationImplementationEx.class)
+				.sendToAddressedAgents(
+					new AgentAddress(processReport.getAgentProcessReport().getAgentIdentity()),
+					new RefreshCacheMessage(distFilesMd5))));
+		LOGGER.info("Send md5 of distribution files to agent.");
+	}
+
 	/**
 	 * File distribution event listener.
 	 *
@@ -448,17 +482,18 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 	}
 
 	/**
-	 * Wait until the given size of agents are all connected. It wait until 10
-	 * sec.
+	 * Wait until the given size of agents are all connected and receive md5 from there cached files.
+	 * It wait until 10 sec.
 	 *
 	 * @param size size of agent.
 	 */
-	public void waitUntilAgentConnected(int size) {
+	public void waitUntilAgentPrepared(int size) {
 		int trial = 1;
 		while (trial++ < 10) {
 			// when agent finished one test, processReports will be updated as
 			// null
-			if (processReports == null || this.processReports.length != size) {
+			if ((processReports == null || this.processReports.length != size)
+				&& agentCachedDistFilesMd5List.size() != size) {
 				synchronized (eventSyncCondition) {
 					eventSyncCondition.waitNoInterrruptException(1000);
 				}
@@ -541,7 +576,7 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 
 	/*
      * (non-Javadoc)
-	 * 
+	 *
 	 * @see net.grinder.ISingleConsole2#getStatisticsIndexMap()
 	 */
 	public StatisticsIndexMap getStatisticsIndexMap() {
@@ -980,7 +1015,7 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 	 * @see ConsoleShutdownListener
 	 */
 	public ListenerSupport<ConsoleShutdownListener> getListeners() {
-		return this.showdownListner;
+		return this.shutdownListener;
 	}
 
 	/**
@@ -990,7 +1025,7 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 	 * @param listener listener to be registered.
 	 */
 	public void addListener(ConsoleShutdownListener listener) {
-		showdownListner.add(listener);
+		shutdownListener.add(listener);
 	}
 
 	/**
@@ -1334,6 +1369,10 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 	@Override
 	public int getRunningProcess() {
 		return runningProcess;
+	}
+
+	public List<Set<String>> getAgentCachedDistFilesMd5List() {
+		return agentCachedDistFilesMd5List;
 	}
 
 	/**

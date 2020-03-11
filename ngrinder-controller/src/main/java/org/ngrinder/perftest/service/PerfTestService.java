@@ -16,7 +16,6 @@ package org.ngrinder.perftest.service;
 import com.google.common.collect.Lists;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-
 import net.grinder.SingleConsole;
 import net.grinder.StopReason;
 import net.grinder.common.GrinderProperties;
@@ -25,7 +24,6 @@ import net.grinder.console.model.ConsoleProperties;
 import net.grinder.util.ConsolePropertiesFactory;
 import net.grinder.util.Directory;
 import net.grinder.util.Pair;
-
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -65,7 +63,6 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.script.ScriptEngine;
 import javax.script.ScriptEngineManager;
 import javax.script.ScriptException;
-
 import java.io.*;
 import java.util.*;
 import java.util.Map.Entry;
@@ -74,12 +71,14 @@ import static java.util.stream.Collectors.toList;
 import static org.ngrinder.common.constant.CacheConstants.*;
 import static org.ngrinder.common.constants.MonitorConstants.MONITOR_FILE_PREFIX;
 import static org.ngrinder.common.util.AccessUtils.getSafe;
+import static org.ngrinder.common.util.AopUtils.proxy;
 import static org.ngrinder.common.util.CollectionUtils.*;
 import static org.ngrinder.common.util.ExceptionUtils.processException;
 import static org.ngrinder.common.util.NoOp.noOp;
 import static org.ngrinder.common.util.Preconditions.checkNotEmpty;
 import static org.ngrinder.common.util.Preconditions.checkNotNull;
 import static org.ngrinder.common.util.TypeConvertUtils.cast;
+import static org.ngrinder.model.Status.PREPARE_DISTRIBUTION;
 import static org.ngrinder.model.Status.getProcessingOrTestingTestStatus;
 import static org.ngrinder.perftest.repository.PerfTestSpecification.*;
 
@@ -655,12 +654,17 @@ public class PerfTestService extends AbstractPerfTestService implements Controll
 	}
 
 	public GrinderProperties prepareTest(PerfTest perfTest) {
-		cleanupPerftestDistibutionFolder(perfTest);
+		proxy(this).markStatusAndProgress(perfTest,
+			PREPARE_DISTRIBUTION, "Distribution files are being prepared.");
+		cleanUpPerftestDistributionFolder(perfTest);
 		ScriptHandler prepareDistribution = prepareDistribution(perfTest);
-		return getGrinderProperties(perfTest, prepareDistribution);
+		GrinderProperties grinderProperties = getGrinderProperties(perfTest, prepareDistribution);
+		proxy(this).markStatusAndProgress(perfTest,
+			PREPARE_DISTRIBUTION, "Distribution files are prepared.");
+		return grinderProperties;
 	}
 
-	private void cleanupPerftestDistibutionFolder(PerfTest perfTest) {
+	private void cleanUpPerftestDistributionFolder(PerfTest perfTest) {
 		File distributedFolder = config.getHome().getDistributedFolderName(perfTest.getId().toString());
 		if (distributedFolder.exists()) {
 			FileUtils.deleteQuietly(distributedFolder);
