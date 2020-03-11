@@ -90,7 +90,7 @@
                     <table class="table table-bordered">
                         <colgroup>
                             <col width="120">
-                            <col width="220">
+                            <col>
                             <col width="120">
                             <col>
                         </colgroup>
@@ -104,7 +104,7 @@
                             <template v-if="test.threshold === 'D'">
                                 <th v-text="i18n('perfTest.report.duration')"></th>
                                 <td>
-                                    <span v-text="test.duration"></span>
+                                    <span>{{ test.duration | durationFormat('HH:mm:ss') }}</span>
                                     <code class="ml-1">HH:MM:SS</code>
                                 </td>
                             </template>
