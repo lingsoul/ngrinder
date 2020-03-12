@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FilenameFilter;
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Timer;
@@ -270,6 +271,11 @@ public class AgentController implements Agent, AgentConstants {
 
 	private void sendLog(ConsoleCommunication consoleCommunication, String testId) {
 		File logFolder = new File(agentConfig.getHome().getLogDirectory(), testId);
+		File recentLogFolder = new File(agentConfig.getHome().getLogDirectory(), "lastTestLog");
+		//add by lingj,加入日志文件夹的判断，如果文件存在，进行删除
+		if (recentLogFolder.exists()) {
+			FileUtils.deleteQuietly(recentLogFolder);
+		}
 		if (!logFolder.exists()) {
 			return;
 		}
@@ -295,6 +301,12 @@ public class AgentController implements Agent, AgentConstants {
 		consoleCommunication.sendMessage(new LogReportGrinderMessage(testId, compressedLog, new AgentAddress(m_agentIdentity)));
 		// Delete logs to clean up
 		if (!agentConfig.getAgentProperties().getPropertyBoolean(PROP_AGENT_KEEP_LOGS)) {
+			//add by lingj,将最近一次日志复制至lastLog文件夹下
+			try {
+				FileUtils.copyDirectory(logFolder,recentLogFolder);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
 			LOGGER.info("Clean up the perftest logs");
 			FileUtils.deleteQuietly(logFolder);
 		}
