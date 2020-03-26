@@ -62,6 +62,7 @@ import java.text.DecimalFormat;
 import java.util.*;
 import java.util.Map.Entry;
 
+import static com.sun.jmx.mbeanserver.Util.cast;
 import static org.ngrinder.common.util.CollectionUtils.*;
 import static org.ngrinder.common.util.ExceptionUtils.processException;
 import static org.ngrinder.common.util.Preconditions.checkNotNull;
@@ -76,6 +77,7 @@ import static org.ngrinder.common.util.Preconditions.checkNotNull;
  */
 public class SingleConsole extends AbstractSingleConsole implements Listener, SampleListener {
 	private static final String RESOURCE_CONSOLE = "net.grinder.console.common.resources.Console";
+	private static final String PROP_CONTROLLER_CHECK_TOO_MANY_ERRORS = "controller.check.too.many.errors";
 	private Thread consoleFoundationThread;
 	private ConsoleFoundationEx consoleFoundation;
 	public static final Resources RESOURCE = new ResourcesImplementation(RESOURCE_CONSOLE);
@@ -638,7 +640,10 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 					}
 				});
 			}
-			checkTooManyError(cumulativeStatistics);
+
+			if (cast(getConsoleProperties().getExtraProperties(PROP_CONTROLLER_CHECK_TOO_MANY_ERRORS))) {
+				checkTooManyError(cumulativeStatistics);
+			}
 			lastSamplingPeriod = lastSamplingPeriod + (interval * gap);
 		} catch (RuntimeException e) {
 			LOGGER.error("Error occurred while updating the statistics : {}", e.getMessage());
