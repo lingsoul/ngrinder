@@ -933,6 +933,8 @@ public class PerfTestService extends AbstractPerfTestService implements Controll
 			consoleProperties.setConsoleHost(config.getCurrentIP());
 			consoleProperties.setIgnoreSampleCount(getSafe(perfTest.getIgnoreSampleCount()));
 			consoleProperties.setSampleInterval(1000 * getSafe(perfTest.getSamplingInterval()));
+			consoleProperties.putExtraProperties(PROP_CONTROLLER_CHECK_TOO_MANY_ERRORS,
+					config.getControllerProperties().getPropertyBoolean(PROP_CONTROLLER_CHECK_TOO_MANY_ERRORS));
 		} catch (Exception e) {
 			throw processException("Error while setting console properties", e);
 		}
