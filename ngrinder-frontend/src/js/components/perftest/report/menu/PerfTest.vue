@@ -27,7 +27,7 @@
             <div class="chart" id="mean-time-chart"></div>
         </div>
 
-        <div v-show="meantimeToFirstByteChart">
+        <div v-show="meanTimeToFirstByteChart">
             <h6 v-text="`${i18n('perfTest.report.header.meantimeToFirstByte')} (ms)`"></h6>
             <div class="chart" id="min-time-first-byte-chart"></div>
         </div>
@@ -37,9 +37,11 @@
             <div class="chart" id="vuser-chart"></div>
         </div>
 
-        <div v-show="userDefinedChart">
-            <h6 v-text="i18n('perfTest.report.header.userDefinedChart')"></h6>
-            <div class="chart" id="user-defined-chart"></div>
+        <div v-show="userDefinedData.length">
+            <template v-for="(data, index) in userDefinedData">
+                <h6 v-text="data.title"></h6>
+                <div class="chart" :id="`user-defined-chart-${index}`"></div>
+            </template>
         </div>
 
         <div v-show="errorChart">
@@ -68,10 +70,10 @@
     export default class PerfTest extends Mixins(Base, ChartMixin, MessagesMixin) {
         tpsChart = {};
         meanTimeChart = {};
-        meantimeToFirstByteChart = {};
+        meanTimeToFirstByteChart = {};
         vuserChart = {};
-        userDefinedChart = {};
         errorChart = {};
+        userDefinedData = [];
 
         mounted() {
             this.$http.get(`/perftest/api/${this.id}/perf`, {
@@ -80,17 +82,51 @@
                     imgWidth: parseInt(this.$refs.tpsChart.offsetWidth),
                 },
             }).then(res => {
+                const numOfTestRecord = Object.keys(res.data.TPS).length;
                 const interval = res.data.chartInterval;
+                const userDefinedData = res.data.User_defined || {};
+                this.processUserDefinedData(userDefinedData, numOfTestRecord);
 
                 this.tpsChart = this.drawChart('tps-chart', res.data.TPS, interval);
                 this.meanTimeChart = this.drawChart('mean-time-chart', res.data.Mean_Test_Time_ms, interval);
-                this.meantimeToFirstByteChart = this.drawChart('min-time-first-byte-chart', res.data.Mean_time_to_first_byte, interval);
+                this.meanTimeToFirstByteChart = this.drawChart('min-time-first-byte-chart', res.data.Mean_time_to_first_byte, interval);
                 this.vuserChart = this.drawChart('vuser-chart', res.data.Vuser, interval);
-                this.userDefinedChart = this.drawChart('user-defined-chart', res.data.User_defined, interval);
                 this.errorChart = this.drawChart('error-chart', res.data.Errors, interval);
+                this.$nextTick(() => {
+                    this.userDefinedData.forEach((each, index) => this.drawChart(`user-defined-chart-${index}`, each.data, interval));
+                });
+
             }).catch(() => this.showErrorMsg(this.i18n('common.message.loading.error')));
 
             $('[data-toggle="popover"]').popover();
+        }
+
+        processUserDefinedData(userDefinedData, numOfTestRecord) {
+            let dataType;
+            let userDefinedDataTemp;
+
+            Object.entries(userDefinedData).forEach(([key, value], index) => {
+                if (index % numOfTestRecord === 0) {
+                    dataType = key;
+                    userDefinedDataTemp = { title: this.getUserDefinedChartTitle(key), data: {}, };
+                    userDefinedDataTemp.data['Total'] = value;
+                    this.userDefinedData[index/numOfTestRecord] = userDefinedDataTemp;
+                } else {
+                    userDefinedDataTemp.data[this.getTestDesc(dataType, key)] = value;
+                }
+            });
+        }
+
+        getUserDefinedChartTitle(dataType) {
+            const title = dataType.replace(/User_defined|_/g, ' ').trim();
+            return title ? title : this.i18n('perfTest.report.header.userDefinedChart');
+        }
+
+        getTestDesc(dataType, dataFileName) {
+            dataFileName = dataFileName.replace(dataType, '');
+            return dataFileName.substring(dataFileName.indexOf('_') + 1)
+                .replace(/_/g, ' ')
+                .trim();
         }
 
         downloadCSV() {
