@@ -85,4 +85,5 @@ public interface ControllerConstants {
 	public static final String PROP_CONTROLLER_ENABLE_STATISTICS = "controller.enable_statistics";
 	public static final String PROP_CONTROLLER_CSV_SEPARATOR = "controller.csv_separator";
 	public static final String PROP_CONTROLLER_GITHUB_BASE_URL = "controller.github_base_url";
+	public static final String PROP_CONTROLLER_CHECK_TOO_MANY_ERRORS = "controller.check.too.many.errors";
 }
