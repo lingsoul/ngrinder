@@ -59,7 +59,7 @@
                         </tr>
                         <tr>
                             <th v-text="i18n('perfTest.report.errors')"></th>
-                            <td>{{ test.error | numFormat }}</td>
+                            <td>{{ test.errors | numFormat }}</td>
                         </tr>
 
                         <!--add by lingj -->
