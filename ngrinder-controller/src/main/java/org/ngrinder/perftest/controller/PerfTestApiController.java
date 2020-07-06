@@ -13,6 +13,7 @@
  */
 package org.ngrinder.perftest.controller;
 
+import lombok.RequiredArgsConstructor;
 import net.grinder.util.Pair;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.math.NumberUtils;
@@ -51,10 +52,10 @@ import org.springframework.web.bind.annotation.*;
 import java.net.URL;
 import java.util.*;
 
-import lombok.RequiredArgsConstructor;
-
 import static com.google.common.collect.Lists.newArrayList;
 import static java.util.stream.Collectors.toList;
+import static org.apache.commons.lang.StringUtils.isEmpty;
+import static org.apache.commons.lang.StringUtils.replace;
 import static org.apache.commons.lang.StringUtils.trimToEmpty;
 import static org.ngrinder.common.constant.CacheConstants.DIST_MAP_NAME_MONITORING;
 import static org.ngrinder.common.constant.CacheConstants.DIST_MAP_NAME_SAMPLING;
@@ -62,7 +63,6 @@ import static org.ngrinder.common.constant.WebConstants.*;
 import static org.ngrinder.common.util.CollectionUtils.buildMap;
 import static org.ngrinder.common.util.CollectionUtils.newHashMap;
 import static org.ngrinder.common.util.ExceptionUtils.processException;
-import static org.ngrinder.common.util.NoOp.noOp;
 import static org.ngrinder.common.util.Preconditions.*;
 import static org.ngrinder.common.util.TypeConvertUtils.cast;
 
@@ -121,7 +121,6 @@ public class PerfTestApiController {
 		Pair<Page<PerfTest>, Pageable> pair = getPerfTests(user, query, tag, queryFilter, pageable);
 		Page<PerfTest> tests = pair.getFirst();
 		pageable = pair.getSecond();
-		annotateDateMarker(tests);
 		result.put("tag", tag);
 		result.put("totalElements", tests.getTotalElements());
 		result.put("number", tests.getNumber());
@@ -372,7 +371,7 @@ public class PerfTestApiController {
 		Map<String, Object> model = new HashMap<>();
 		PerfTest perfTest = createPerfTestFromQuickStart(user, "Test for " + url.getHost(), url.getHost());
 		perfTest.setScriptName(newEntry.getPath());
-		perfTest.setScriptRevision(-1L);
+		perfTest.setScriptRevision("-1");
 		model.put(PARAM_TEST, perfTest);
 
 		model.putAll(getDefaultAttributes(user));
@@ -456,33 +455,23 @@ public class PerfTestApiController {
 		return attributes;
 	}
 
-	private void annotateDateMarker(Page<PerfTest> tests) {
-		TimeZone userTZ = TimeZone.getTimeZone(userContext.getCurrentUser().getTimeZone());
-		Calendar userToday = Calendar.getInstance(userTZ);
-		Calendar userYesterday = Calendar.getInstance(userTZ);
-		userYesterday.add(Calendar.DATE, -1);
-		for (PerfTest test : tests) {
-			Calendar localedModified = Calendar.getInstance(userTZ);
-			localedModified.setTime(DateUtils.convertToUserDate(userContext.getCurrentUser().getTimeZone(),
-				test.getLastModifiedDate()));
-			if (org.apache.commons.lang.time.DateUtils.isSameDay(userToday, localedModified)) {
-				test.setDateString("today");
-			} else if (org.apache.commons.lang.time.DateUtils.isSameDay(userYesterday, localedModified)) {
-				test.setDateString("yesterday");
-			} else {
-				test.setDateString("earlier");
-			}
-		}
-	}
-
 	private Map<String, Object> getStatus(PerfTest perfTest) {
 		Map<String, Object> result = newHashMap();
 		result.put("id", perfTest.getId());
 		result.put("status", perfTest.getStatus());
-		result.put("message",
-			StringUtils.replace(perfTest.getProgressMessage() + "\n<b>" + perfTest.getLastProgressMessage() + "</b>\n"
-				+ perfTest.getLastModifiedDateToStr(), "\n", "<br/>"));
+		result.put("message", getStatusMessage(perfTest));
 		return result;
+	}
+
+	private String getStatusMessage(PerfTest perfTest) {
+		String message = "";
+		String progressMessage = perfTest.getProgressMessage();
+		if (!isEmpty(progressMessage)) {
+			message += progressMessage + "<br>";
+		}
+		message += "<b>" + perfTest.getLastProgressMessage() + "</b><br>";
+		message += perfTest.getLastModifiedDateToStr();
+		return replace(message, "\n", "<br>");
 	}
 
 	@SuppressWarnings("ConstantConditions")
@@ -571,6 +560,7 @@ public class PerfTestApiController {
 		if (StringUtils.isNotEmpty(ownerId)) {
 			user = userService.getOne(ownerId);
 		}
+
 		return fileEntryService.getAll(user)
 			.stream()
 			.filter(input -> input != null && input.getFileType().getFileCategory() == FileCategory.SCRIPT)
@@ -626,9 +616,8 @@ public class PerfTestApiController {
 		int interval = perfTestService.getReportDataInterval(id, dataTypes[0], imgWidth);
 		Map<String, Object> resultMap = Maps.newHashMap();
 		for (String each : dataTypes) {
-			String key = StringUtils.replaceChars(each, "()", "");
 			Map<String, List<Float>> result = perfTestService.getReportData(id, each, onlyTotal, interval);
-			resultMap.put(key, result);
+			resultMap.put(each, result);
 		}
 		resultMap.put(PARAM_TEST_CHART_INTERVAL, interval * test.getSamplingInterval());
 		return resultMap;

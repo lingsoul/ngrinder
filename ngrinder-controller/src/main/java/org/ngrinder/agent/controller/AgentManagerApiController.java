@@ -136,8 +136,8 @@ public class AgentManagerApiController {
 	 *
 	 * @return json message
 	 */
-	@PreAuthorize("hasAnyRole('A')")
 	@GetMapping("/state")
+	@PreAuthorize("hasAnyRole('A', 'S', 'U')")
 	public SystemDataModel getState(@RequestParam String ip, @RequestParam String name, @RequestParam String region) {
 		return agentService.getSystemDataModel(ip, name, region);
 	}
@@ -272,5 +272,16 @@ public class AgentManagerApiController {
 	@PreAuthorize("permitAll")
 	public Map<String, Integer> getAvailableAgentCount(User user, @RequestParam String targetRegion) {
 		return buildMap("availableAgentCount", agentService.getReadyAgentCount(user.getUserId(), targetRegion));
+	}
+
+	/**
+	 * Add an external agent.
+	 * @param ip	agent ip
+	 * @param port	agent port
+	 */
+	@PostMapping("/connect/{ip}/{port}")
+	@PreAuthorize("permitAll")
+	public void addConnectionAgent(@PathVariable String ip, @PathVariable int port, @RequestParam String region) {
+		agentService.addConnectionAgent(ip, port, region);
 	}
 }

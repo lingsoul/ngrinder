@@ -9,7 +9,8 @@
         <search-bar ref="searchBar" @filter-running="runQueryFilter" @filter-schduled="runQueryFilter"
                     @create="$router.push('/perftest/new')"
                     @search="updateTableWithUrl" @change-tag="updateTableWithUrl"
-                    @delete-selected-tests="deleteTests($refs.vuetable.selectedTo.join(','))"></search-bar>
+                    @delete-selected-tests="deleteTests($refs.vuetable.selectedTo.join(','))">
+        </search-bar>
         <vuetable
             v-show="showTable"
             ref="vuetable"
@@ -33,20 +34,22 @@
                    data-toggle="popover"
                    data-html="true"
                    data-trigger="hover"
+                   :class="{'pointer-cursor': !isRunningStatus(props.rowData.status), 'wait-cursor': isRunningStatus(props.rowData.status)}"
                    :id="`ball_${props.rowData.id}`"
                    :title="props.rowData.status.name"
-                   :data-content="`${props.rowData.progressMessage}<br><b>${props.rowData.lastProgressMessage}</b>`.replace(/\n/g, '<br>')">
+                   :data-content="getStatusDataContent(props.rowData.progressMessage, props.rowData.lastProgressMessage)">
                     <img :src="`${contextPath}/img/ball/${props.rowData.status.iconName}`">
                 </div>
             </template>
 
             <template slot="testName" slot-scope="props">
+                <span :class="{ today : isToday(props.rowData.createdDate) }"/>
                 <div class="ellipsis testName"
                      data-toggle="popover"
-                     data-html="true"
                      data-trigger="hover"
+                     data-placement="top"
                      :title="props.rowData.testName"
-                     :data-content="getTestNamePopoverContent(props.rowData).replace(/\n/g, '<br>')">
+                     :data-content="getTestNamePopoverContent(props.rowData)">
                     <router-link :to="`/perftest/${props.rowData.id}`" target="_self" v-text="props.rowData.testName"></router-link>
                 </div>
             </template>
@@ -54,15 +57,25 @@
             <template slot="scriptName" slot-scope="props">
                 <div class="ellipsis scriptName"
                      data-toggle="popover"
-                     data-html="true"
                      data-trigger="hover"
+                     data-placement="top"
                      :title="i18n('perfTest.list.scriptName')"
-                     :data-content="`${props.rowData.scriptName}<br> - ${i18n('script.list.revision')} : ${(props.rowData.scriptRevision)}`">
-                    <a v-if="isAdmin"
-                       :href="`/script/detail/${props.rowData.scriptName}?r=${(props.rowData.scriptRevision)}&ownerId=${(props.rowData.createdUser.userId)}`"
-                       v-text="props.rowData.scriptName"></a>
-                    <a v-else :href="`/script/detail/${props.rowData.scriptName}?r=${(props.rowData.scriptRevision)}`"
-                       v-text="props.rowData.scriptName"></a>
+                     :data-content="`${props.rowData.scriptName}\n - ${i18n('script.list.revision')} : ${(props.rowData.scriptRevision)}`">
+                    <template v-if="props.rowData.scm === 'svn'">
+                        <a v-if="isAdmin"
+                           :href="`/script/detail/${props.rowData.scriptName}?r=${(props.rowData.scriptRevision)}&ownerId=${(props.rowData.createdUser.userId)}`"
+                           v-text="props.rowData.scriptName"
+                           target="_blank">
+                        </a>
+                        <a v-else :href="`/script/detail/${props.rowData.scriptName}?r=${(props.rowData.scriptRevision)}`"
+                           v-text="props.rowData.scriptName"
+                           target="_blank">
+                        </a>
+                    </template>
+                    <template v-else>
+                        <span v-if="$utils.isNumeric(props.rowData.scriptRevision)" v-text="props.rowData.scriptName"></span>
+                        <a v-else target="_blank" :href="props.rowData.scriptRevision" v-text="props.rowData.scriptName"></a>
+                    </template>
                 </div>
             </template>
 
@@ -113,7 +126,7 @@
                      data-toggle="popover"
                      data-html="true"
                      data-trigger="hover"
-                     data-placement="left"
+                     data-placement="top"
                      :data-content="getVuserPopoverContent(props.rowData)">
                      {{ props.rowData.vuserPerAgent * props.rowData.agentCount | numFormat }}
                 </div>
@@ -132,6 +145,7 @@
         <vuetable-pagination
             ref="pagination"
             :css="table.css.pagination"
+            :on-each-side=5
             @vuetable-pagination:change-page="changePage">
         </vuetable-pagination>
     </div>
@@ -147,19 +161,20 @@
 
     import Base from '../../Base.vue';
     import SearchBar from './Searchbar.vue';
-    import IntroButton from '../../common/IntroButton.vue';
     import MessagesMixin from '../../common/mixin/MessagesMixin.vue';
     import PopoverMixin from '../../common/mixin/PopoverMixin.vue';
     import SmallChart from './SmallChart.vue';
     import TableConfig from './mixin/TableConfig.vue';
+    import CommonMixin from '../mixin/CommonMixin.vue';
+    import { TipType } from '../../../constants';
 
     Vue.component('small-chart', SmallChart);
 
     @Component({
         name: 'perfTestList',
-        components: { IntroButton, vueHeadful, SearchBar, Vuetable, VuetablePagination },
+        components: { vueHeadful, SearchBar, Vuetable, VuetablePagination },
     })
-    export default class PerfTestList extends Mixins(Base, MessagesMixin, TableConfig, PopoverMixin) {
+    export default class PerfTestList extends Mixins(Base, MessagesMixin, TableConfig, PopoverMixin, CommonMixin) {
         runningSummary = `0 ${this.i18n('perfTest.list.runningSummary')}`;
         tests = [];
         autoUpdateTargets = [];
@@ -182,12 +197,17 @@
         }
 
         mounted() {
+            this.$store.commit('activeTip', TipType.INTROJS);
             this.init();
-            this.$refs.vuetable.reload().then(() => this.showTable = true);
+            this.$refs.vuetable.reload().then(() => {
+                this.showTable = true;
+                this.$nextTick(this.addIntroJsConfig);
+            });
             this.updateStatusTimeoutId = setTimeout(this.updatePerftestStatus, 2000);
         }
 
         beforeDestroy() {
+            this.$store.commit('activeTip', '');
             clearTimeout(this.updateStatusTimeoutId);
         }
 
@@ -245,7 +265,7 @@
         tableLoaded() {
             this.autoUpdateTargets = [];
             this.tests.forEach((test, index) => {
-                if (!this.isFinishedStatusType(test)) {
+                if (!test.status.reportable) {
                     this.autoUpdateTargets.push({ 'id': test.id, 'index': index });
                 }
             });
@@ -267,39 +287,40 @@
             return `${this.contextPath}/perftest?page.page=${page}&page.size=${pageSize}&query=${query}&queryFilter=${queryFilter}&sort=${sort}&tag=${tag}`;
         }
 
-        isFinishedStatusType(test) {
-            return test.status.name === 'FINISHED' || test.status.name === 'STOP_BY_ERROR' ||
-                test.status.name === 'STOP_ON_ERROR' || test.status.name === 'CANCELED';
-        }
-
         getOwnerPopoverContent(test) {
             let content = `${this.i18n('perfTest.list.owner')} : ${test.createdUser.userName} (${test.createdUser.userId})`;
             if (test.lastModifiedUser) {
-                content += `<br> ${this.i18n('perfTest.list.modifier.oneLine')} : ${test.lastModifiedUser.userName} (${test.lastModifiedUser.userId})`;
+                content += `\n${this.i18n('perfTest.list.modifier.oneLine')} : ${test.lastModifiedUser.userName} (${test.lastModifiedUser.userId})`;
             }
             return content;
         }
 
         getErrorRatePopoverContent(test) {
-            return `${this.i18n('perfTest.list.totalTests')} : ${test.tests + test.errors}<br>` +
-                `${this.i18n('perfTest.list.successfulTests')} : ${test.tests}<br>` +
+            return `${this.i18n('perfTest.list.totalTests')} : ${test.tests + test.errors}\n` +
+                `${this.i18n('perfTest.list.successfulTests')} : ${test.tests}\n` +
                 `${this.i18n('perfTest.list.errors')} : ${test.errors}`;
         }
 
         getVuserPopoverContent(test) {
-            return `${this.i18n('perfTest.list.agent')} : ${test.agentCount ? test.agentCount : 0}<br>` +
-                `${this.i18n('perfTest.list.process')} : ${test.processes ? test.processes : 0}<br>` +
+            return `${this.i18n('perfTest.list.agent')} : ${test.agentCount ? test.agentCount : 0}\n` +
+                `${this.i18n('perfTest.list.process')} : ${test.processes ? test.processes : 0}\n` +
                 `${this.i18n('perfTest.list.thread')} : ${test.threads ? test.threads : 0}`;
         }
 
         getTestNamePopoverContent(test) {
-            let content = `${test.description} <p>${test.testComment}</p>`;
-            if (test.scheduledTime) {
-                content += `${this.i18n('perfTest.list.scheduledTime')} : ${this.$options.filters.dateFormat(test.scheduledTime, 'YYYY-MM-DD HH:mm')}<br>`;
+            let content = '';
+            if (test.description.length > 0) {
+                content += `${test.description}\n`;
             }
-            content += `${this.i18n('perfTest.list.modifiedTime')} : ${this.$options.filters.dateFormat(test.lastModifiedDate, 'YYYY-MM-DD HH:mm')}<br>`;
+            if (test.testComment.length > 0) {
+                content += `${test.testComment}\n`;
+            }
+            if (test.scheduledTime) {
+                content += `${this.i18n('perfTest.list.scheduledTime')} : ${this.$options.filters.dateFormat(test.scheduledTime, 'YYYY-MM-DD HH:mm')}\n`;
+            }
+            content += `${this.i18n('perfTest.list.modifiedTime')} : ${this.$options.filters.dateFormat(test.lastModifiedDate, 'YYYY-MM-DD HH:mm')}\n`;
             if (test.tagString) {
-                content += `${this.i18n('perfTest.config.tags')} : ${test.tagString}<br>`;
+                content += `${this.i18n('perfTest.config.tags')} : ${test.tagString}\n`;
             }
             content += this.getOwnerPopoverContent(test);
             return content;
@@ -331,6 +352,16 @@
         }
 
         deleteTests(ids) {
+            if (!ids) {
+                this.$bootbox.alert({
+                    message: this.i18n('perfTest.message.delete.alert'),
+                    buttons: {
+                        ok: { label: this.i18n('common.button.ok') },
+                    },
+                });
+                return;
+            }
+
             this.$bootbox.confirm({
                 message: this.i18n('perfTest.message.delete.confirm'),
                 buttons: {
@@ -396,6 +427,22 @@
                 this.updateStatusTimeoutId = setTimeout(this.updatePerftestStatus, 2000);
             }
         }
+
+        addIntroJsConfig() {
+            // vuetable-2 not support add html attribute to field header.
+            const statusFieldHeader = document.getElementsByClassName('vuetable-th-slot-status')[0];
+            const actionsFieldHeader = document.getElementsByClassName('vuetable-th-slot-actions')[0];
+            statusFieldHeader.dataset.step = '4';
+            actionsFieldHeader.dataset.step = '5';
+            statusFieldHeader.dataset.intro = this.i18n('intro.list.perftest.status');
+            actionsFieldHeader.dataset.intro = this.i18n('intro.list.perftest.actions');
+        }
+
+        isToday(date) {
+            const now = this.$moment().tz(this.ngrinder.currentUser.timeZone);
+            const timeZoneDate = this.$moment(date).tz(this.ngrinder.currentUser.timeZone);
+            return now.isSame(timeZoneDate, 'day');
+        }
     }
 </script>
 
@@ -433,20 +480,28 @@
             }
         }
 
-        .intro-button-container {
-            margin-top: -26px;
-        }
-
         .popover {
             width: auto;
             min-width: 200px;
             max-width: 600px;
         }
     }
+</style>
 
-    .intro-button-container {
-        .intro-button-title {
-            margin-right: -30px;
+<style lang="less">
+    span {
+        &.today {
+            position: absolute;
+            width: 32px;
+            height: 8px;
+            top: 0;
+            left: 0;
+            background: url('/img/icon_today.png') no-repeat right;
+            background-size: 32px 8px;
         }
+    }
+
+    tr.vuetable-detail-row > td {
+        padding: 0;
     }
 </style>

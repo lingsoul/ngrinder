@@ -1,4 +1,4 @@
-/* 
+/*
  * Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
  *  You may obtain a copy of the License at
@@ -9,7 +9,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License. 
+ * limitations under the License.
  */
 package net.grinder.console.communication;
 
@@ -19,9 +19,7 @@ import net.grinder.common.processidentity.ProcessIdentity;
 import net.grinder.communication.CommunicationException;
 import net.grinder.communication.MessageDispatchRegistry;
 import net.grinder.communication.MessageDispatchRegistry.AbstractHandler;
-import net.grinder.engine.communication.AgentDownloadGrinderMessage;
-import net.grinder.engine.communication.AgentUpdateGrinderMessage;
-import net.grinder.engine.communication.LogReportGrinderMessage;
+import net.grinder.engine.communication.*;
 import net.grinder.message.console.AgentControllerProcessReportMessage;
 import net.grinder.message.console.AgentControllerState;
 import net.grinder.messages.agent.StartGrinderMessage;
@@ -54,6 +52,8 @@ public class AgentProcessControlImplementation implements AgentProcessControl {
 	private final ListenerSupport<AgentStatusUpdateListener> m_agentStatusUpdateListeners = new ListenerSupport<>();
 	private final ListenerSupport<LogArrivedListener> m_logListeners = new ListenerSupport<>();
 	private final ListenerSupport<AgentDownloadRequestListener> m_agentDownloadRequestListeners = new ListenerSupport<>();
+	private final ListenerSupport<ConnectionAgentListener> m_connectionAgentListener = new ListenerSupport<>();
+	private final ListenerSupport<ConnectionAgentCommunicationListener> m_connectionAgentCommunicationListener = new ListenerSupport<>();
 
 	private static final Logger LOGGER = LoggerFactory.getLogger(AgentProcessControlImplementation.class);
 	/**
@@ -82,7 +82,11 @@ public class AgentProcessControlImplementation implements AgentProcessControl {
 		timer.schedule(new TimerTask() {
 			public void run() {
 				synchronized (m_agentMap) {
-					update();
+					try {
+						update();
+					} catch (Exception e) {
+						LOGGER.error("Error occurred during update agent", e);
+					}
 				}
 			}
 		}, 0, UPDATE_PERIOD);
@@ -90,7 +94,11 @@ public class AgentProcessControlImplementation implements AgentProcessControl {
 		timer.schedule(new TimerTask() {
 			public void run() {
 				synchronized (m_agentMap) {
-					purge(m_agentMap);
+					try {
+						purge(m_agentMap);
+					} catch (Exception e) {
+						LOGGER.error("Error occurred during purge agent", e);
+					}
 				}
 			}
 		}, 0, FLUSH_PERIOD);
@@ -123,6 +131,28 @@ public class AgentProcessControlImplementation implements AgentProcessControl {
 						if (agentUpdateGrinderMessage != null) {
 							m_consoleCommunication.sendToAddressedAgents(message.getAddress(), agentUpdateGrinderMessage);
 						}
+					}
+				});
+			}
+		});
+
+		messageDispatchRegistry.set(ConnectionAgentMessage.class, new AbstractHandler<ConnectionAgentMessage>() {
+			public void handle(final ConnectionAgentMessage message) {
+				m_connectionAgentListener.apply(new Informer<ConnectionAgentListener>() {
+					@Override
+					public void inform(ConnectionAgentListener listener) {
+						listener.onConnectionAgentMessage(message.getIp(), message.getName(), message.getPort());
+					}
+				});
+			}
+		});
+
+		messageDispatchRegistry.set(ConnectionAgentCommunicationMessage.class, new AbstractHandler<ConnectionAgentCommunicationMessage>() {
+			public void handle(final ConnectionAgentCommunicationMessage message) {
+				m_connectionAgentCommunicationListener.apply(new Informer<ConnectionAgentCommunicationListener>() {
+					@Override
+					public void inform(ConnectionAgentCommunicationListener listener) {
+						listener.onConnectionAgentCommunication(message.getUsingPort(), message.getIp(), message.getPort());
 					}
 				});
 			}
@@ -171,6 +201,14 @@ public class AgentProcessControlImplementation implements AgentProcessControl {
 
 	public void addAgentDownloadRequestListener(AgentDownloadRequestListener agentDownloadRequestListener) {
 		m_agentDownloadRequestListeners.add(agentDownloadRequestListener);
+	}
+
+	public void addConnectionAgentListener(ConnectionAgentListener connectionAgentListener) {
+		m_connectionAgentListener.add(connectionAgentListener);
+	}
+
+	public void addConnectionAgentCommunicationListener(ConnectionAgentCommunicationListener listener) {
+		m_connectionAgentCommunicationListener.add(listener);
 	}
 
 	/**
@@ -337,7 +375,7 @@ public class AgentProcessControlImplementation implements AgentProcessControl {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see net.grinder.console.communication.AgentProcessControl#startAgent(java .util.Set,
 	 * net.grinder.common.GrinderProperties)
 	 */
@@ -352,7 +390,7 @@ public class AgentProcessControlImplementation implements AgentProcessControl {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see net.grinder.console.communication.AgentProcessControl#stopAgent(net.grinder
 	 * .common.processidentity.AgentIdentity)
 	 */
@@ -363,7 +401,7 @@ public class AgentProcessControlImplementation implements AgentProcessControl {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see net.grinder.console.communication.AgentProcessControl#getNumberOfLiveAgents ()
 	 */
 	@Override
@@ -375,7 +413,7 @@ public class AgentProcessControlImplementation implements AgentProcessControl {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see net.grinder.console.communication.AgentProcessControl#getAgents(net.grinder
 	 * .message.console.AgentControllerState, int)
 	 */
@@ -396,7 +434,7 @@ public class AgentProcessControlImplementation implements AgentProcessControl {
 
 	/*
 	 * (non-Javadoc)
-	 * 
+	 *
 	 * @see net.grinder.console.communication.AgentProcessControl#getAllAgents()
 	 */
 	@Override

@@ -65,6 +65,7 @@
         <vuetable-pagination
             ref="pagination"
             :css="table.css.pagination"
+            :on-each-side=5
             @vuetable-pagination:change-page="changePage">
         </vuetable-pagination>
     </div>
@@ -180,17 +181,18 @@
                         ok: { label: this.i18n('common.button.ok') },
                     },
                 });
-            } else {
-                this.$bootbox.confirm({
-                    message: this.i18n('script.message.delete.confirm'),
-                    buttons: {
-                        confirm: { label: this.i18n('common.button.ok') },
-                        cancel: { label: this.i18n('common.button.cancel') },
-                    },
-                    onConfirm: () => this.$http.delete('/script/api/delete', { data: this.$refs.vuetable.selectedTo })
-                        .then(() => this.refresh()),
-                });
+                return;
             }
+
+            this.$bootbox.confirm({
+                message: this.i18n('script.message.delete.confirm'),
+                buttons: {
+                    confirm: { label: this.i18n('common.button.ok') },
+                    cancel: { label: this.i18n('common.button.cancel') },
+                },
+                onConfirm: () => this.$http.delete('/script/api/delete', { data: this.$refs.vuetable.selectedTo })
+                    .then(() => this.refresh()),
+            });
         }
 
         init(data) {
@@ -257,8 +259,12 @@
         th, td {
             padding: 8px;
 
-            .description, .path {
+            .path {
                 width: 230px;
+            }
+
+            .description {
+                width: 390px;
             }
         }
     }

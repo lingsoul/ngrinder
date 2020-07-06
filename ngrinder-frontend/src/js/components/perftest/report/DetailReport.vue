@@ -21,7 +21,7 @@
                             <td><span v-text="test.agentCount"></span></td>
                         </tr>
                         <tr>
-                            <th v-html="`${i18n('perfTest.report.process')}<br>${i18n('perfTest.report.thread')}`"></th>
+                            <th class="pre-wrap" v-text="`${i18n('perfTest.report.process')}\n${i18n('perfTest.report.thread')}`"></th>
                             <td class="process-thread-col" v-text="`${test.processes} / ${test.threads}`"></td>
                         </tr>
                         <tr>
@@ -62,16 +62,18 @@
                             <td>{{ test.errors | numFormat }}</td>
                         </tr>
                     </table>
-                    <div class="card bg-light py-1">
+                    <div class="card bg-light">
                         <ul class="nav flex-column">
-                            <li class="nav-item active pl-3" ref="perftestNavMenu">
+                            <li class="nav-item active pl-3" ref="perftestNavMenu" :class="{ 'mb-1': test.targetHosts }">
                                 <a href="#" class="nav-link px-0" @click="showPerftestMenu($event)" v-text="i18n('perfTest.report.performanceReport')"></a>
                             </li>
 
-                            <li class="nav-item mb-2 pl-3" v-text="i18n('perfTest.report.targetHost')"></li>
-                            <li v-for="ip in test.targetHosts.split(',')" class="monitor" :ip="ip">
-                                <a href="#" @click="showMonitorMenu($event, ip)" class="nav-link py-0 ml-3 pb-1" v-text="ip"></a>
-                            </li>
+                            <template v-if="test.targetHosts">
+                                <li class="nav-item mb-1 pl-3" v-text="i18n('perfTest.report.targetHost')"></li>
+                                <li v-for="targetHost in test.targetHosts.split(',')" class="monitor pt-1">
+                                    <a href="#" @click="showMonitorMenu($event, targetHost)" class="nav-link py-0 ml-3 pb-1" v-text="targetHost"></a>
+                                </li>
+                            </template>
                         </ul>
                     </div>
                 </div>
@@ -109,11 +111,11 @@
                         </tr>
                         <tr v-if="test.description">
                             <th v-text="i18n('common.label.description')"></th>
-                            <td colspan="3" v-html="test.description.replace(/\n/g, '<br>')"></td>
+                            <td class="pre-wrap" colspan="3" v-text="test.description"></td>
                         </tr>
                         <tr v-if="test.testComment">
                             <th v-text="i18n('perfTest.report.testComment')"></th>
-                            <td colspan="3" v-html="test.testComment.replace(/\n/g, '<br>')"></td>
+                            <td class="pre-wrap" colspan="3" v-text="test.testComment"></td>
                         </tr>
                     </table>
                     <div>
@@ -169,14 +171,14 @@
             .finally(this.hideProgressBar);
         }
 
-        showMonitorMenu($event, ip) {
+        showMonitorMenu($event, targetHost) {
             if (!this.switchActiveNavMenu($event.target.parentElement)) {
                 return;
             }
 
             this.props = {
                 id: this.id,
-                targetIP: ip,
+                targetIP: (targetHost.indexOf(':') === -1) ? targetHost : targetHost.split(':')[1],
             };
             this.currentMenuComponent = Monitor;
         }

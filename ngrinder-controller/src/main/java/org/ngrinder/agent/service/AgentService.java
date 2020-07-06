@@ -20,16 +20,21 @@ import net.grinder.common.GrinderProperties;
 import net.grinder.common.processidentity.AgentIdentity;
 import net.grinder.console.communication.AgentProcessControlImplementation;
 import net.grinder.console.communication.AgentProcessControlImplementation.AgentStatusUpdateListener;
+import net.grinder.console.communication.ConnectionAgentListener;
 import net.grinder.engine.controller.AgentControllerIdentityImplementation;
 import net.grinder.message.console.AgentControllerState;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.mutable.MutableInt;
 import org.ngrinder.agent.model.AgentRequest;
+import org.ngrinder.agent.model.Connection;
 import org.ngrinder.agent.repository.AgentManagerRepository;
+import org.ngrinder.agent.repository.ConnectionRepository;
 import org.ngrinder.agent.store.AgentInfoStore;
+import org.ngrinder.common.exception.NGrinderRuntimeException;
 import org.ngrinder.infra.config.Config;
 import org.ngrinder.infra.hazelcast.HazelcastService;
 import org.ngrinder.infra.hazelcast.task.AgentStateTask;
+import org.ngrinder.infra.hazelcast.task.ConnectionAgentTask;
 import org.ngrinder.infra.hazelcast.topic.listener.TopicListener;
 import org.ngrinder.infra.hazelcast.topic.message.TopicEvent;
 import org.ngrinder.infra.hazelcast.topic.subscriber.TopicSubscriber;
@@ -42,15 +47,20 @@ import org.ngrinder.region.service.RegionService;
 import org.ngrinder.service.AbstractAgentService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
+import static java.util.Collections.emptySet;
 import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.Collectors.toSet;
@@ -62,8 +72,8 @@ import static org.ngrinder.agent.model.AgentRequest.RequestType.UPDATE_AGENT;
 import static org.ngrinder.common.constant.CacheConstants.*;
 import static org.ngrinder.common.constant.ControllerConstants.PROP_CONTROLLER_ENABLE_AGENT_AUTO_APPROVAL;
 import static org.ngrinder.common.util.CollectionUtils.newHashMap;
+import static org.ngrinder.common.util.ExceptionUtils.processException;
 import static org.ngrinder.common.util.TypeConvertUtils.cast;
-import static org.ngrinder.infra.config.Config.NONE_REGION;
 
 /**
  * Agent manager service.
@@ -72,7 +82,8 @@ import static org.ngrinder.infra.config.Config.NONE_REGION;
  */
 @Service
 @RequiredArgsConstructor
-public class AgentService extends AbstractAgentService implements TopicListener<AgentRequest>, AgentStatusUpdateListener {
+public class AgentService extends AbstractAgentService
+	implements TopicListener<AgentRequest>, AgentStatusUpdateListener, ConnectionAgentListener {
 	protected static final Logger LOGGER = LoggerFactory.getLogger(AgentService.class);
 
 	protected final AgentManager agentManager;
@@ -92,10 +103,32 @@ public class AgentService extends AbstractAgentService implements TopicListener<
 
 	protected final ScheduledTaskService scheduledTaskService;
 
+	private final ConnectionRepository connectionRepository;
+
+	@Value("${ngrinder.version}")
+	private String nGrinderVersion;
+
 	@PostConstruct
 	public void init() {
 		agentManager.addAgentStatusUpdateListener(this);
+		agentManager.addConnectionAgentListener(this);
 		topicSubscriber.addListener(AGENT_TOPIC_LISTENER_NAME, this);
+		Executors.newSingleThreadScheduledExecutor().scheduleAtFixedRate(this::connectionAgentHealthCheck, 1L, 1L, TimeUnit.MINUTES);
+	}
+
+	private void connectionAgentHealthCheck() {
+		connectionRepository.findAll()
+			.stream()
+			.filter(connection -> config.getRegion().equals(connection.getRegion()))
+			.filter(connection -> agentInfoStore.getAgentInfo(createAgentKey(connection.getIp(), connection.getName())) == null)
+			.forEach(connection -> {
+				try {
+					agentManager.addConnectionAgent(connection.getIp(), connection.getPort());
+					LOGGER.info("Reconnected to connection agent {}:{}", connection.getIp(), connection.getPort());
+				} catch (Exception e) {
+					LOGGER.debug("Fail to reconnect to connection agent {}:{}", connection.getIp(), connection.getPort());
+				}
+			});
 	}
 
 	private void fillUpAgentInfo(AgentInfo agentInfo, AgentProcessControlImplementation.AgentStatus status) {
@@ -311,6 +344,19 @@ public class AgentService extends AbstractAgentService implements TopicListener<
 									  final GrinderProperties grinderProperties, final Integer agentCount) {
 		final Set<AgentInfo> allFreeAgents = getAllAttachedFreeApprovedAgentsForUser(user.getUserId());
 		final Set<AgentInfo> necessaryAgents = selectAgent(user, allFreeAgents, agentCount);
+
+		if (hasOldVersionAgent(necessaryAgents)) {
+			for (AgentInfo agentInfo : necessaryAgents) {
+				if (!agentInfo.getVersion().equals(nGrinderVersion)) {
+					update(agentInfo.getIp(), agentInfo.getName());
+				}
+			}
+			throw new NGrinderRuntimeException("Old version agent is detected so, update message has been sent automatically." +
+				"\n Please restart perftest after few minutes.");
+		}
+
+		hazelcastService.put(CACHE_RECENTLY_USED_AGENTS, user.getUserId(), necessaryAgents);
+
 		LOGGER.info("{} agents are starting for user {}", agentCount, user.getUserId());
 		for (AgentInfo agentInfo : necessaryAgents) {
 			LOGGER.info("- Agent {}", agentInfo.getName());
@@ -318,18 +364,51 @@ public class AgentService extends AbstractAgentService implements TopicListener<
 		agentManager.runAgent(singleConsole, grinderProperties, necessaryAgents);
 	}
 
+
+	private boolean hasOldVersionAgent(Set<AgentInfo> agentInfos) {
+		return agentInfos.stream().anyMatch(agentInfo -> !agentInfo.getVersion().equals(nGrinderVersion));
+	}
+
 	/**
 	 * Select agent. This method return agent set which is belong to the given user first and then share agent set.
 	 *
+	 * Priority of agent selection.
+	 * 1. owned agent of recently used.
+	 * 2. owned agent.
+	 * 3. public agent of recently used.
+	 * 4. public agent.
+	 *
 	 * @param user          user
-	 * @param allFreeAgents agents
-	 * @param agentCount    number of agent
-	 * @return selected agent.
+	 * @param allFreeAgents available agents
+	 * @param agentCount    number of agents
+	 * @return selected agents.
 	 */
-	private Set<AgentInfo> selectAgent(User user, Set<AgentInfo> allFreeAgents, int agentCount) {
-		Stream<AgentInfo> ownedFreeAgentStream = allFreeAgents.stream().filter(agentInfo -> isOwnedAgent(agentInfo, user.getUserId()));
-		Stream<AgentInfo> freeAgentStream = allFreeAgents.stream().filter(this::isCommonAgent);
-		return concat(ownedFreeAgentStream, freeAgentStream).limit(agentCount).collect(toSet());
+	Set<AgentInfo> selectAgent(User user, Set<AgentInfo> allFreeAgents, int agentCount) {
+		Set<AgentInfo> recentlyUsedAgents = hazelcastService.getOrDefault(CACHE_RECENTLY_USED_AGENTS, user.getUserId(), emptySet());
+
+		Comparator<AgentInfo> recentlyUsedPriorityComparator = (agent1, agent2) -> {
+			if (recentlyUsedAgents.contains(agent1)) {
+				return -1;
+			}
+			if (recentlyUsedAgents.contains(agent2)) {
+				return 1;
+			}
+			return 0;
+		};
+
+		Stream<AgentInfo> ownedFreeAgentStream = allFreeAgents
+			.stream()
+			.filter(agentInfo -> isOwnedAgent(agentInfo, user.getUserId()))
+			.sorted(recentlyUsedPriorityComparator);
+
+		Stream<AgentInfo> freeAgentStream = allFreeAgents
+			.stream()
+			.filter(this::isCommonAgent)
+			.sorted(recentlyUsedPriorityComparator);
+
+		return concat(ownedFreeAgentStream, freeAgentStream)
+			.limit(agentCount)
+			.collect(toSet());
 	}
 
 	/**
@@ -364,7 +443,7 @@ public class AgentService extends AbstractAgentService implements TopicListener<
 
 	@Override
 	public SystemDataModel getSystemDataModel(String ip, String name, String region) {
-		return hazelcastService.submitToRegion(AGENT_EXECUTOR_SERVICE_NAME, new AgentStateTask(ip, name), region);
+		return hazelcastService.submitToRegion(AGENT_EXECUTOR_SERVICE_NAME, new AgentStateTask(ip, name), agentManager.extractRegionKey(region));
 	}
 
 	/**
@@ -374,6 +453,10 @@ public class AgentService extends AbstractAgentService implements TopicListener<
 	 */
 	public void updateAgent(AgentIdentity agentIdentity) {
 		agentManager.updateAgent(agentIdentity, agentManager.getAgentForceUpdate() ? "99.99" : config.getVersion());
+	}
+
+	public void addConnectionAgent(String ip, int port, String region) {
+		hazelcastService.submitToRegion(AGENT_EXECUTOR_SERVICE_NAME, new ConnectionAgentTask(ip, port), region);
 	}
 
 
@@ -463,5 +546,17 @@ public class AgentService extends AbstractAgentService implements TopicListener<
 		for (AgentInfo agentInfo : agentInfoSet) {
 			agentInfoStore.deleteAgentInfo(agentInfo.getAgentKey());
 		}
+	}
+
+	@Override
+	public void onConnectionAgentMessage(String ip, String name, int port) {
+		Connection connection = connectionRepository.findByIpAndPort(ip, port);
+		if (connection == null) {
+			connection = new Connection(ip, name, port, config.getRegion());
+		} else {
+			connection.setName(name);
+			connection.setRegion(config.getRegion());
+		}
+		connectionRepository.save(connection);
 	}
 }

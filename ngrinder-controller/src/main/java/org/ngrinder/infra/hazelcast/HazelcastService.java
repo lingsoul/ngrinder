@@ -14,7 +14,6 @@ import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 
@@ -51,8 +50,8 @@ public class HazelcastService {
 		try {
 			return future.get();
 		} catch (InterruptedException | ExecutionException e) {
-			LOGGER.error("Error while updating regions. {}", e.getMessage());
-			throw new NGrinderRuntimeException("Error while updating regions.");
+			LOGGER.error("Error while running task in region [{}] {}", region, e.getMessage());
+			throw new NGrinderRuntimeException(e);
 		}
 	}
 
@@ -91,5 +90,10 @@ public class HazelcastService {
 		IMap<K, V> distMap = hazelcastInstance.getMap(map);
 		checkNotNull(distMap, "Cache(" + map +") is not exist");
 		return distMap.get(key);
+	}
+
+	public <K, V> V getOrDefault(String map, K key, V defaultValue) {
+		V value = get(map, key);
+		return value == null ? defaultValue : value;
 	}
 }

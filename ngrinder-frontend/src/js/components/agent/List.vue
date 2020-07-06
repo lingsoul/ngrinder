@@ -12,17 +12,23 @@
             </legend>
         </fieldSet>
         <div class="card card-header search-bar border-bottom-0">
-            <button class="btn btn-primary mr-1" @click="update">
-                <i class="mr-1 fa fa-arrow-up"></i>
-                <span v-text="i18n('agent.list.update')"></span>
-            </button>
-            <button class="btn btn-danger mr-3" @click="stopAgents">
-                <i class="mr-1 fa fa-stop"></i>
-                <span v-text="i18n('common.button.stop')"></span>
-            </button>
+            <div v-if="isAdmin">
+                <button class="btn btn-primary mr-1" @click="update">
+                    <i class="mr-1 fa fa-arrow-up"></i>
+                    <span v-text="i18n('agent.list.update')"></span>
+                </button>
+                <button class="btn btn-danger mr-1" @click="stopAgents">
+                    <i class="mr-1 fa fa-stop"></i>
+                    <span v-text="i18n('common.button.stop')"></span>
+                </button>
+                <button class="btn btn-info mr-3" @click="$refs.addConnectionAgentModal.show()">
+                    <i class="mr-1 fa fa-plus"></i>
+                    <span v-text="i18n('common.button.add')"></span>
+                </button>
+            </div>
 
             <input class="mr-1 form-control search-input" type="text" ref="searchInput"
-                   placeholder="Keywords" @keydown.enter.prevent="search"/>
+                   placeholder="Keywords" @keydown.enter.prevent="search" v-focus/>
             <button class="btn btn-info" @click="search">
                 <i class="fa fa-search mr-1"></i>
                 <span v-text="i18n('common.button.search')"></span>
@@ -97,8 +103,10 @@
         <vuetable-pagination
             ref="pagination"
             :css="table.css.pagination"
+            :on-each-side=5
             @vuetable-pagination:change-page="changePage">
         </vuetable-pagination>
+        <add-connection-agent-modal ref="addConnectionAgentModal" :regions="regions" v-if="isAdmin"/>
     </div>
 </template>
 
@@ -113,12 +121,13 @@
     import Base from '../Base.vue';
     import TableConfig from './mixin/TableConfig.vue';
     import MessagesMixin from '../common/mixin/MessagesMixin.vue';
+    import AddConnectionAgentModal from './modal/AddConnectionAgentModal.vue';
 
     const AGENT_KEY_TOKEN = '_';
 
     @Component({
         name: 'agentList',
-        components: { Vuetable, VuetablePagination, VueHeadful },
+        components: { Vuetable, VuetablePagination, VueHeadful, AddConnectionAgentModal },
     })
     export default class AgentList extends Mixins(Base, MessagesMixin, TableConfig) {
         agents = [];
@@ -226,7 +235,12 @@
         }
 
         updateAgentStatePopover() {
-            this.$nextTick(() =>this.agents.forEach(agent => document.getElementById(`ball_${agent.key}`).setAttribute('data-content', this.getAgentStatePopoverContent(agent))));
+            this.$nextTick(() => this.agents.forEach(agent => {
+                const ball = document.getElementById(`ball_${agent.key}`);
+                if (ball != null) {
+                    ball.setAttribute('data-content', this.getAgentStatePopoverContent(agent));
+                }
+            }));
         }
 
         getAgentStatePopoverContent(agent) {
@@ -246,6 +260,7 @@
         }
 
         changeRegion() {
+            this.$refs.vuetable.currentPage = 1;
             clearTimeout(this.updateStatesTimer);
             this.updateStates();
             this.updateDownloadLink();
@@ -413,7 +428,7 @@
         flex-direction: row;
 
         .search-input {
-            width: 150px;
+            width: 280px;
             height: inherit;
         }
     }

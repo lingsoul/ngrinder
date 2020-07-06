@@ -36,9 +36,8 @@ import org.springframework.context.annotation.Configuration;
 import java.net.InetAddress;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
-import static com.hazelcast.config.MaxSizeConfig.MaxSizePolicy.PER_NODE;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static net.grinder.util.NetworkUtils.DEFAULT_LOCAL_HOST_ADDRESS;
 import static net.grinder.util.NetworkUtils.selectLocalIp;
 import static org.ngrinder.common.constant.CacheConstants.*;
@@ -58,6 +57,8 @@ public class DynamicCacheConfig implements ClusterConstants {
 	private static final int DAY = 24 * 60 * 60;
 	private static final int HOUR = 60 * 60;
 	private static final int MIN = 60;
+
+	private static final String HAZELCAST_PARTITION_COUNT = "hazelcast.partition.count";
 
 	@Bean
 	public org.springframework.cache.CacheManager cacheManager() {
@@ -86,7 +87,7 @@ public class DynamicCacheConfig implements ClusterConstants {
 
 	@Bean
 	public HazelcastInstance hazelcastInstance() {
-		com.hazelcast.config.Config hazelcastConfig = new com.hazelcast.config.Config();
+		com.hazelcast.config.Config hazelcastConfig = new com.hazelcast.config.Config("nGrinder");
 		hazelcastConfig.setManagedContext(managedContext());
 		hazelcastConfig.getMemberAttributeConfig().setAttributes(getClusterMemberAttributes());
 		hazelcastConfig.setMapConfigs(cacheConfigMap().getHazelcastCacheConfigs());
@@ -104,6 +105,10 @@ public class DynamicCacheConfig implements ClusterConstants {
 			tcpIpConfig.setEnabled(true);
 			tcpIpConfig.setMembers(Arrays.asList(getClusterURIs()));
 			networkConfig.setPublicAddress(selectLocalIp(Arrays.asList(getClusterURIs())));
+		}
+
+		if (!isClustered()) {
+			hazelcastConfig.setProperty(HAZELCAST_PARTITION_COUNT, "1");
 		}
 
 		HazelcastInstance hazelcastInstance = Hazelcast.newHazelcastInstance(hazelcastConfig);
@@ -141,15 +146,19 @@ public class DynamicCacheConfig implements ClusterConstants {
 	@Bean
 	public CacheConfigHolder cacheConfigMap() {
 		CacheConfigHolder cm = new CacheConfigHolder();
-		cm.addDistMap(DIST_MAP_NAME_SAMPLING, 15, 20);
-		cm.addDistMap(DIST_MAP_NAME_MONITORING, 15, 20);
+		cm.addDistMap(DIST_MAP_NAME_SAMPLING, 15);
+		cm.addDistMap(DIST_MAP_NAME_MONITORING, 15);
+		cm.addDistMap(DIST_MAP_NAME_AGENT, 10);
 
-		cm.addDistCache(CACHE_USERS, 30, 100, 30, 100);
-		cm.addDistCache(CACHE_FILE_ENTRIES, 1 * HOUR + 40 * MIN, 100, 1 * HOUR + 40 * MIN, 100);
+		cm.addDistCache(CACHE_USERS, 30, 300);
+		cm.addDistCache(CACHE_FILE_ENTRIES, 1 * HOUR + 40 * MIN, 300);
 
-		cm.addLocalCache(CACHE_RIGHT_PANEL_ENTRIES, 1 * DAY, 2);
-		cm.addLocalCache(CACHE_LEFT_PANEL_ENTRIES, 1 * DAY, 2);
+		cm.addLocalCache(CACHE_GITHUB_SCRIPTS, 5 * MIN, 300);
+		cm.addLocalCache(CACHE_RIGHT_PANEL_ENTRIES, 1 * DAY, 1);
+		cm.addLocalCache(CACHE_LEFT_PANEL_ENTRIES, 1 * DAY, 1);
 		cm.addLocalCache(CACHE_CURRENT_PERFTEST_STATISTICS, 5, 1);
+		cm.addLocalCache(CACHE_GITHUB_IS_MAVEN_GROOVY, 5 * MIN, 300);
+		cm.addLocalCache(CACHE_RECENTLY_USED_AGENTS, 1 * DAY, 100);
 		return cm;
 	}
 
@@ -159,30 +168,41 @@ public class DynamicCacheConfig implements ClusterConstants {
 
 		void addLocalCache(String cacheName, int timeout, int count) {
 			Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder()
-				.maximumSize(count).expireAfterWrite(timeout, TimeUnit.SECONDS);
+				.maximumSize(count).expireAfterWrite(timeout, SECONDS);
 			caffeineCacheConfig.put(cacheName, cacheBuilder);
 		}
 
-		void addDistCache(String cacheName, int timeout, int count, int nearCacheTimeout, int nearCacheCount) {
-			MapConfig mapConfig = createDistMapConfig(cacheName, timeout, count);
-
-			NearCacheConfig nearCacheConfig = new NearCacheConfig(cacheName);
-			nearCacheConfig.setTimeToLiveSeconds(nearCacheTimeout);
-			nearCacheConfig.getEvictionConfig().setSize(nearCacheCount);
-			mapConfig.setNearCacheConfig(nearCacheConfig);
-
+		void addDistMap(String cacheName, int timeout) {
+			MapConfig mapConfig = createDistMapConfig(cacheName, timeout);
 			hazelcastCacheConfigs.put(cacheName, mapConfig);
 		}
 
-		void addDistMap(String cacheName, int timeout, int count) {
-			hazelcastCacheConfigs.put(cacheName, createDistMapConfig(cacheName, timeout, count));
+		void addDistCache(String cacheName, int timeout, int count) {
+			MapConfig mapConfig = createDistMapConfig(cacheName, timeout);
+
+			NearCacheConfig nearCacheConfig = new NearCacheConfig(cacheName);
+			nearCacheConfig.setTimeToLiveSeconds(timeout);
+
+			if (count > 0) {
+				mapConfig.setEvictionPolicy(EvictionPolicy.LRU)
+					.getMaxSizeConfig()
+					.setSize(count)
+					.setMaxSizePolicy(MaxSizeConfig.MaxSizePolicy.PER_NODE);
+
+				nearCacheConfig.getEvictionConfig()
+					.setSize(count)
+					.setMaximumSizePolicy(EvictionConfig.MaxSizePolicy.ENTRY_COUNT)
+					.setEvictionPolicy(EvictionPolicy.LRU);
+			}
+
+			mapConfig.setNearCacheConfig(nearCacheConfig);
+			hazelcastCacheConfigs.put(cacheName, mapConfig);
 		}
 
-		private MapConfig createDistMapConfig(String cacheName, int timeout, int count) {
+		private MapConfig createDistMapConfig(String cacheName, int timeout) {
 			MapConfig mapConfig = new MapConfig(cacheName);
 			mapConfig.getMergePolicyConfig().setPolicy(LatestUpdateMergePolicy.class.getName());
 			mapConfig.setTimeToLiveSeconds(timeout);
-			mapConfig.getMaxSizeConfig().setSize(count).setMaxSizePolicy(PER_NODE);
 			return mapConfig;
 		}
 

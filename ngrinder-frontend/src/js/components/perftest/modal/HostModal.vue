@@ -14,7 +14,7 @@
                         <fieldset>
                             <control-group :class="{error: errors.has('domain')}" labelMessageKey="perfTest.config.domain">
                                 <input type="text"
-                                       ref="domainInput"
+                                       ref="domain"
                                        class="form-control"
                                        name="domain"
                                        v-model="host"
@@ -47,7 +47,7 @@
                 <footer class="modal-footer">
                     <button class="btn btn-success" @click.prevent="addHost">
                         <i class="fa fa-plus mr-1"></i>
-                        <span v-text="i18n('perfTest.config.add')"></span>
+                        <span v-text="i18n('common.button.add')"></span>
                     </button>
                     <button class="btn btn-danger" data-dismiss="modal" v-text="i18n('common.button.cancel')"></button>
                 </footer>
@@ -80,14 +80,12 @@
 
         addHost() {
             if (!this.ip && !this.host) {
-                this.$refs.domainInput.focus();
+                this.$refs.domain.focus();
                 return;
             }
 
             this.$validator.validateAll().then(result => {
                 if (result) {
-                    this.hide();
-
                     let host = this.host;
 
                     if (this.ip) {
@@ -95,12 +93,12 @@
                     }
 
                     this.$emit('add-host', host);
-                    this.clear();
+                    this.hide();
                 }
             });
         }
 
-        clear() {
+        beforeHidden() {
             this.host = '';
             this.ip = '';
         }
@@ -119,8 +117,8 @@
 
         .control-group {
             display: flex;
-            align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 2px;
+            min-height: 45px;
         }
     }
 
@@ -135,6 +133,13 @@
     #add-host-modal {
         .controls {
             margin: 0 0 0 30px;
+        }
+
+        .control-label {
+            .label-message {
+                display: inline-block;
+                margin-top: 5px;
+            }
         }
     }
 </style>

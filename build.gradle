@@ -20,6 +20,7 @@ allprojects  {
 
 subprojects {
   apply plugin: "java"
+  apply plugin: "maven-publish"
 
   compileJava.options.encoding = "UTF-8"
   compileTestJava.options.encoding = "UTF-8"
@@ -28,6 +29,7 @@ subprojects {
   targetCompatibility = 1.8
 
   ext {
+    profile = project.hasProperty('profile') ? profile : 'development'
     slf4j_version = "1.7.28"
     spring_security_version = "5.1.6.RELEASE"
     spring_boot_version = "2.1.8.RELEASE"
@@ -47,5 +49,30 @@ subprojects {
 
   test {
     testLogging.showStandardStreams = true
+  }
+
+  task javadocJar(type: Jar) {
+    from javadoc.destinationDir
+    classifier "javadoc"
+  }
+
+  task sourceJar(type: Jar) {
+    from sourceSets.main.allJava
+    classifier "sources"
+  }
+
+  publishing {
+    publications {
+      nGrinerModules(MavenPublication) {
+        from components.java
+        artifact sourceJar
+        artifact javadocJar
+      }
+    }
+    repositories {
+      maven {
+        url = "file:../../ngrinder.maven.repo/releases/"
+      }
+    }
   }
 }

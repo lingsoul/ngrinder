@@ -46,6 +46,28 @@
         }
 
         #ngrinder {
+
+            &.hasHBar {
+                .__panel {
+                    margin-bottom: -17px !important;
+                }
+            }
+
+            // vue-scroll style
+            .__bar-is-vertical,
+            .__bar-is-horizontal {
+                background: #c0c0c0 !important;
+
+                &:hover {
+                    background: #707070 !important;
+                }
+            }
+
+            .__rail-is-vertical {
+                right: 0 !important;
+            }
+            // end vue-scroll style
+
             .container {
                 width: 1200px;
                 min-width: 1200px;
@@ -53,6 +75,14 @@
 
             .pointer-cursor {
                 cursor: pointer;
+            }
+
+            .wait-cursor {
+                cursor: wait;
+            }
+
+            .default-cursor {
+                cursor: default;
             }
 
             .container {
@@ -158,6 +188,18 @@
             }
         }
 
+        .select2-container {
+            .select2-default {
+                color: #777 !important;
+            }
+        }
+
+        .modal-dialog {
+            .modal-body {
+                word-break: break-all;
+            }
+        }
+
         .uneditable-input {
             border-color: #ced4da !important;
             background-color: #fff;
@@ -166,7 +208,7 @@
         }
 
         .control-group.error {
-            input, select, button, .input-group-text {
+            input, select, .input-group-text {
                 color: @error-color;
                 border-color: @error-color;
                 box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075);
@@ -202,7 +244,7 @@
             .popover-body {
                 max-height: 450px;
                 line-height: 20px;
-                overflow-y: scroll;
+                overflow-y: auto;
             }
         }
 

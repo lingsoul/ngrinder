@@ -1,14 +1,18 @@
 import Vue from 'vue';
-import Vuex, {mapState} from 'vuex';
+import { mapState } from 'vuex';
 import VueRouter from 'vue-router';
 import VeeValidate from 'vee-validate';
 import moment from 'moment';
 import axios from 'axios';
 import VueLocalStorage from 'vue-localstorage';
+import VueShortkey from 'vue-shortkey';
 import bFormSlider from 'vue-bootstrap-slider/es';
 import numFormat from 'vue-filter-number-format';
+import vuescroll from 'vuescroll';
 import numeral from 'numeral';
 import store from 'store/vuex-store.js';
+import VueRouterReferer from '@tozd/vue-router-referer';
+import { AllHtmlEntities } from 'html-entities';
 
 import Event from 'bus-event.js';
 import Login from 'Login.vue';
@@ -20,7 +24,7 @@ import ScriptList from 'script/List.vue';
 import ScriptEditor from 'script/Editor.vue';
 import ScriptConsole from 'operation/ScriptConsole.vue';
 import SystemConfig from 'operation/SystemConfig.vue';
-import Announcement from 'operation/Announcement.vue';
+import AnnouncementEditor from 'operation/Announcement.vue';
 import UserList from 'user/List.vue';
 import AgentList from 'agent/List.vue';
 import AgentDetail from 'agent/Detail.vue';
@@ -28,6 +32,8 @@ import AgentDetail from 'agent/Detail.vue';
 import Copyright from 'common/Copyright.vue';
 import Navigator from 'common/navigator/Navigator.vue';
 import Messages from 'common/Messages.vue';
+import Announcement from 'common/Announcement.vue';
+import Tip from 'common/Tip.vue';
 
 import VeeValidateInitializer from 'vee-validate-initializer.js';
 import Utils from 'utils.js';
@@ -59,6 +65,8 @@ axiosInstance.interceptors.request.use(config => {
     return config;
 });
 
+Vue.use(VueShortkey);
+Vue.use(vuescroll);
 Vue.use(VueLocalStorage, {
     name: 'localStorage',
     bind: true,
@@ -69,7 +77,9 @@ Vue.use(VeeValidate, {
     useConstraintAttrs: false,
 });
 Vue.use(bFormSlider);
+Vue.use(VueRouterReferer);
 
+Vue.prototype.$htmlEntities = AllHtmlEntities;
 Vue.prototype.$bootbox = BootBox;
 Vue.prototype.$moment = moment;
 Vue.prototype.$http = axiosInstance;
@@ -84,6 +94,10 @@ Vue.prototype.$watchAll = function(props, callback) {
 
 Vue.directive('focus', {
     inserted: el => el.focus(),
+});
+
+Vue.directive('htmlBindScript', (el, binding) => {
+    $(el).html(binding.value);
 });
 
 Vue.directive('visible', (el, binding) => {
@@ -127,7 +141,7 @@ const routes = [
     {path: '/script/detail/:remainedPath(.*)?', component: ScriptEditor, name: 'scriptEditorDetail', props: true},
     {path: '/operation/script_console', component: ScriptConsole, name: 'scriptConsole'},
     {path: '/operation/system_config', component: SystemConfig, name: 'systemConfig'},
-    {path: '/operation/announcement', component: Announcement, name: 'announcement'},
+    {path: '/operation/announcement', component: AnnouncementEditor, name: 'announcementEditor'},
     {path: '/user', component: UserList, name: 'userList'},
     {path: '/agent', component: AgentList, name: 'agentList'},
     {path: '/agent/:ip/:name', component: AgentDetail, name: 'agentDetail', props: true},
@@ -149,9 +163,12 @@ new Vue({
         Copyright,
         Navigator,
         Messages,
+        Announcement,
+        Tip,
     },
     beforeMount: function() {
         this.$store.commit('ngrinder', window.ngrinder);
+        this.$store.commit('activeTip', '');
         VeeValidateInitializer.initValidationMessages();
     },
     computed: {
