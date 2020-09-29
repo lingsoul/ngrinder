@@ -12,6 +12,7 @@ import vuescroll from 'vuescroll';
 import numeral from 'numeral';
 import store from 'store/vuex-store.js';
 import VueRouterReferer from 'vue-router-referer.js';
+import VueClipboard from 'vue-clipboard2';
 import { AllHtmlEntities } from 'html-entities';
 
 import Event from 'bus-event.js';
@@ -25,6 +26,7 @@ import ScriptEditor from 'script/Editor.vue';
 import ScriptConsole from 'operation/ScriptConsole.vue';
 import SystemConfig from 'operation/SystemConfig.vue';
 import AnnouncementEditor from 'operation/Announcement.vue';
+import Settings from 'settings/Settings.vue';
 import UserList from 'user/List.vue';
 import AgentList from 'agent/List.vue';
 import AgentDetail from 'agent/Detail.vue';
@@ -78,6 +80,7 @@ Vue.use(VeeValidate, {
 });
 Vue.use(bFormSlider);
 Vue.use(VueRouterReferer);
+Vue.use(VueClipboard);
 
 Vue.prototype.$htmlEntities = AllHtmlEntities;
 Vue.prototype.$bootbox = BootBox;
@@ -142,6 +145,8 @@ const routes = [
     {path: '/operation/script_console', component: ScriptConsole, name: 'scriptConsole'},
     {path: '/operation/system_config', component: SystemConfig, name: 'systemConfig'},
     {path: '/operation/announcement', component: AnnouncementEditor, name: 'announcementEditor'},
+    {path: '/settings', component: Home, redirect: '/settings/webhook'},
+    {path: '/settings/:currentMenu(.*)?', component: Settings, name: 'settings'},
     {path: '/user', component: UserList, name: 'userList'},
     {path: '/agent', component: AgentList, name: 'agentList'},
     {path: '/agent/:ip/:name', component: AgentDetail, name: 'agentDetail', props: true},

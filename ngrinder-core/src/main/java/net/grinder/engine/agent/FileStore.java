@@ -31,6 +31,7 @@ import net.grinder.util.Directory;
 import net.grinder.util.FileContents;
 import net.grinder.util.StreamCopier;
 import org.apache.commons.io.FileUtils;
+import org.ngrinder.common.exception.NGrinderRuntimeException;
 import org.slf4j.Logger;
 
 import java.io.File;
@@ -39,15 +40,14 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 
-import static net.grinder.util.FileUtils.getAllFilesInDirectory;
-import static net.grinder.util.FileUtils.getMd5;
+import static net.grinder.util.FileUtils.*;
 
 
 /**
  * FileStore for cache control in nGrinder.
  * This is the customized version of {@link FileStore} which grinder has.
  *
- * @since 3.5.1
+ * @since 3.5.0
  */
 final class FileStore {
 	private final Logger m_logger;
@@ -144,7 +144,7 @@ final class FileStore {
 						List<File> cachedFiles = getAllFilesInDirectory(cacheDir);
 						cachedFiles
 							.stream()
-							.filter(file -> !isRequiredFile(requiredFilesDigest, file))
+							.filter(file ->  !requiredFilesDigest.contains(getFileDigest(cacheDir, file)))
 							.forEach(FileUtils::deleteQuietly);
 					} catch (IOException e) {
 						m_logger.info("Failed refresh cached file store", e);
@@ -204,14 +204,6 @@ final class FileStore {
 					m_cacheHighWaterMark = message.getCacheHighWaterMark();
 				}
 			});
-	}
-
-	private boolean isRequiredFile(Set<String> requiredFilesDigest, File file) {
-		try {
-			return requiredFilesDigest.contains(getMd5(file));
-		} catch (IOException e) {
-			return false;
-		}
 	}
 
 	private void createReadmeFile() throws CommunicationException {

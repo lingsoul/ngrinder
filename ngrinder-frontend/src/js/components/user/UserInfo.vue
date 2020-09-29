@@ -48,18 +48,7 @@
                           v-model="user.description"></textarea>
             </control-group>
 
-            <control-group :class="{ error: errors.has('mobilePhone') }"
-                           name="mobilePhone"
-                           controlsStyle="height: 55px;"
-                           labelMessageKey="user.info.phone">
-                <input-append name="mobilePhone" ref="mobilePhone"
-                              errStyle="width: 290px;"
-                              v-model="user.mobilePhone"
-                              :validationRules="{ regex: /^\+?\d{2,3}-?\d{2,5}(-?\d+)?$/ }"
-                              message="user.info.phone"/>
-            </control-group>
-
-            <control-group v-if="config.allowShareChange" :class="{ 'mb-3' : config.showPasswordByDefault }" labelMessageKey="user.share.title">
+            <control-group v-if="config.allowShareChange" class="follower-container" :class="{ 'mb-3' : config.showPasswordByDefault }" labelMessageKey="user.share.title">
                 <select2 v-model="user.followersStr" type="input" name="followersStr"
                          :option="followerSelect2Option" customStyle="width: 100%;">
                 </select2>
@@ -143,7 +132,6 @@
             userName: '',
             email: '',
             description: '',
-            mobilePhone: '',
             password: '',
             followersStr: '',
         };
@@ -267,13 +255,17 @@
             select {
                 font-size: 12px;
             }
+
+            .follower-container {
+                .select2-container-multi {
+                    .select2-choices {
+                        max-height: 110px !important;
+                        overflow: scroll;
+                    }
+                }
+            }
+
         }
-    }
-</style>
-
-<style lang="less">
-    .user-info {
-
     }
 </style>
 

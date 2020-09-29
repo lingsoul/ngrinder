@@ -1,8 +1,10 @@
 <template>
     <div ref="editorContainer" class="container d-flex flex-column overflow-y-auto h-100">
         <vue-headful :title="i18n('script.editor.title')"/>
+        <i v-show="isFullScreen()" class="fa fa-compress pointer-cursor" @click="fullScreen"></i>
         <div class="file-desc-container flex-grow-0">
             <div class="form-horizontal">
+                <button class="btn-return-to-list btn-primary border-0 position-absolute" @click="returnToList" v-text="i18n('common.list')"></button>
                 <div class="caret-box pointer-cursor" @click="toggleHideDescription">
                     <i class="fa" :class="{ 'fa-caret-up' : !hideDescription, 'fa-caret-down' : hideDescription }"></i>
                 </div>
@@ -44,6 +46,10 @@
                                 <i class="fa fa-save mr-1"></i>
                                 <span v-text="i18n('common.button.save')"></span>
                             </button>
+                            <button class="btn btn-success" @click="save(true)">
+                                <i class="fa fa-undo mr-1"></i>
+                                <span v-text="i18n('common.button.save.and.close')"></span>
+                            </button>
                         </template>
                     </div>
                 </div>
@@ -79,21 +85,23 @@
                     @resize="editorSize = $event[0].size"
                     horizontal>
             <pane :min-size="15" :size="editorSize">
-                <code-mirror ref="editor"
-                             class="h-100"
-                             :value="file.content"
-                             :options="cmOptions">
-                </code-mirror>
+                <div class="h-100 position-relative">
+                    <i v-show="!isFullScreen()" class="fa fa-expand pointer-cursor" @click="fullScreen"></i>
+                    <code-mirror ref="editor"
+                                 class="h-100"
+                                 :value="file.content"
+                                 :options="cmOptions">
+                    </code-mirror>
+                </div>
             </pane>
             <pane v-if="validationResult" :min-size="15" :size="100 - editorSize">
-                <vue-scroll class="border">
+                <vue-scroll class="border validation-result-container">
                     <pre class="h-100 validation-result" v-html="validationResult"></pre>
                 </vue-scroll>
             </pane>
         </splitpanes>
-        <div class="script-samples-link" ref="sampleLink">
-            <a target="_blank" href="https://github.com/naver/ngrinder/tree/master/script-sample">Script
-                Samples</a>
+        <div v-if="validationResult" class="script-samples-link">
+            <a target="_blank" href="https://github.com/naver/ngrinder/tree/master/script-sample">Script Samples</a>
         </div>
         <host-modal ref="addHostModal" @add-host="addHost" focus="domain"></host-modal>
         <target-host-info-modal ref="targetHostInfoModal" :ip="targetHostIp"></target-host-info-modal>
@@ -149,7 +157,7 @@
         SCRIPT_DESCRIPTION_HIDE_KEY = 'script_description_hide';
         hideDescription = false;
 
-        editorSize = 85;
+        editorSize = 70;
 
         beforeRouteEnter(to, from, next) {
             const path = to.params.remainedPath;
@@ -170,6 +178,10 @@
 
         created() {
             this.hideDescription = this.$localStorage.get(this.SCRIPT_DESCRIPTION_HIDE_KEY, false, Boolean);
+        }
+
+        fullScreen() {
+            this.$refs.editor.codemirror.setOption('fullScreen', !this.isFullScreen());
         }
 
         mounted() {
@@ -247,7 +259,7 @@
         }
 
         contentChanged() {
-            return this.$refs.editor.getValue() !== this.file.content;
+            return !this.$utils.equalsIgnoreNewLineChar(this.$refs.editor.getValue(), this.file.content);
         }
 
         save(isClose) {
@@ -393,6 +405,14 @@
             this.$localStorage.set(this.SCRIPT_DESCRIPTION_HIDE_KEY, this.hideDescription);
         }
 
+        returnToList() {
+            this.$router.referer ? this.$router.back() : this.$router.push('/script/');
+        }
+
+        isFullScreen() {
+            return this.$refs.editor && this.$refs.editor.codemirror.getOption('fullScreen');
+        }
+
         get basePath() {
             return this.remainedPath.substring(0, this.remainedPath.lastIndexOf('/'));
         }
@@ -416,7 +436,7 @@
 
     div.caret-box {
         position: absolute;
-        left: 25px;
+        left: 53px;
         padding: 5px;
         color: #495057
     }
@@ -438,6 +458,13 @@
             width: 110px;
             margin: 4px 10px 0px -10px;
         }
+    }
+
+    .btn-return-to-list {
+        left: -1px;
+        height: 30px;
+        width: 50px;
+        border-radius: 0 3px 3px 0;
     }
 
     .description-container {
@@ -473,8 +500,9 @@
     }
 
     .script-samples-link {
-        margin-top: 10px;
-        text-align: center;
+        display: inline-block;
+        margin: -18px 3px 0 auto;
+        z-index: 1;
     }
 
     .div-host {
@@ -492,24 +520,39 @@
         margin: 2px 0 2px 7px;
     }
 
-    .validation-result {
-        padding: 5px 5px 0 5px;
-        margin-bottom: 0;
-        font-size: 12px;
+    .validation-result-container {
         background-color: #f5f5f5;
+
+        .validation-result {
+            padding: 5px 5px 0 5px;
+            margin-bottom: 0;
+            font-size: 12px;
+            background-color: inherit;
+        }
     }
 
-    .expand-btn-container {
+    .fa-expand {
+        font-size: 14px;
+        z-index: 100;
         position: absolute;
-        left: 50%;
-        width: 40px;
-        height: 20px;
-        margin-left: -20px;
-        margin-top: 6px;
+        right: 14px;
+        top: 7px;
+    }
+
+    .fa-compress {
+        font-size: 15px;
+        position: absolute;
+        z-index: 100;
+        right: 15px;
+        top: 42px;
     }
 
     input[type="text"] {
         width: 164px;
         height: 30px;
+    }
+
+    .splitpanes .splitpanes__pane {
+        transition: none;   // Remove splitpanes initial transition
     }
 </style>

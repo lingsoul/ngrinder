@@ -13,6 +13,7 @@
  */
 package org.ngrinder.perftest.service;
 
+import com.google.common.collect.ImmutableList;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import net.grinder.SingleConsole;
@@ -34,11 +35,13 @@ import org.ngrinder.infra.config.Config;
 import org.ngrinder.infra.hazelcast.HazelcastService;
 import org.ngrinder.infra.plugin.PluginManager;
 import org.ngrinder.infra.schedule.ScheduledTaskService;
+import org.ngrinder.infra.webhook.plugin.NGrinderWebhookPlugin;
+import org.ngrinder.infra.webhook.service.WebhookConfigService;
+import org.ngrinder.infra.webhook.service.WebhookService;
 import org.ngrinder.model.PerfTest;
 import org.ngrinder.model.Status;
 import org.ngrinder.perftest.model.NullSingleConsole;
 import org.ngrinder.perftest.service.samplinglistener.*;
-import org.ngrinder.perftest.service.samplinglistener.TooManyErrorCheckPlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
@@ -55,8 +58,7 @@ import java.util.Set;
 
 import static java.util.Arrays.asList;
 import static java.util.stream.Collectors.toSet;
-import static net.grinder.util.FileUtils.getAllFilesInDirectory;
-import static net.grinder.util.FileUtils.getMd5;
+import static net.grinder.util.FileUtils.*;
 import static org.apache.commons.lang.ObjectUtils.defaultIfNull;
 import static org.ngrinder.common.constant.CacheConstants.DIST_MAP_NAME_MONITORING;
 import static org.ngrinder.common.constant.CacheConstants.DIST_MAP_NAME_SAMPLING;
@@ -98,6 +100,10 @@ public class PerfTestRunnable implements ControllerConstants {
 
 	@Getter
 	private final AgentService agentService;
+
+	private final WebhookService webhookService;
+
+	private final WebhookConfigService webhookConfigService;
 
 	private Runnable startRunnable;
 
@@ -225,34 +231,29 @@ public class PerfTestRunnable implements ControllerConstants {
 	/**
 	 * Delete cached distribution files, These are already in the agent cache directory.
 	 *
+	 * @param distDir						   Directory containing files to be distributed for testing.
 	 * @param distFiles 					   Required files for currently running test.
-	 * @param distFilesDigest				   Required file's md5 checksum for currently running test.
-	 * @param agentCachedDistFilesDigestList   Md5 checksum of files in each agent cache directory
+	 * @param distFilesDigest				   Required file's digest for currently running test.
+	 * @param agentCachedDistFilesDigestList   Digest of files in each agent cache directory.
+	 *
 	 * */
-	private void deleteCachedDistFiles(List<File> distFiles,
+	private void deleteCachedDistFiles(File distDir,
+									   List<File> distFiles,
 									   Set<String> distFilesDigest,
 									   List<Set<String>> agentCachedDistFilesDigestList) {
 		Set<String> cachedDistFilesDigest = extractCachedDistFilesDigest(distFilesDigest, agentCachedDistFilesDigestList);
 
 		distFiles
 			.stream()
-			.filter(file -> isCachedFile(cachedDistFilesDigest, file))
+			.filter(file -> cachedDistFilesDigest.contains(getFileDigest(distDir, file)))
 			.forEach(FileUtils::deleteQuietly);
-	}
-
-	private boolean isCachedFile(Set<String> cachedDistFilesDigest, File file) {
-		try {
-			return cachedDistFilesDigest.contains(getMd5(file));
-		} catch (IOException e) {
-			return false;
-		}
 	}
 
 	/**
 	 * Extract non cached distribution files for send to each agents.
 	 *
-	 * @param distFilesDigest					Required file's md5 checksum for currently running test.
-	 * @param agentCachedDistFilesDigestList    Md5 checksum of files in each agent cache directory.
+	 * @param distFilesDigest					Required file's digest for currently running test.
+	 * @param agentCachedDistFilesDigestList    Digest of files in each agent cache directory.
 	 *
 	 * */
 	private Set<String> extractCachedDistFilesDigest(Set<String> distFilesDigest,
@@ -268,10 +269,11 @@ public class PerfTestRunnable implements ControllerConstants {
 	private void prepareFileDistribution(PerfTest perfTest, SingleConsole singleConsole) throws IOException {
 		File distDir = perfTestService.getDistributionPath(perfTest);
 		List<File> distFiles = getAllFilesInDirectory(distDir);
-		Set<String> distFilesDigest = getMd5(distFiles);
+
+		Set<String> distFilesDigest = getFilesDigest(distDir, distFiles);
 
 		singleConsole.sendDistFilesDigestToAgents(distFilesDigest);
-		deleteCachedDistFiles(distFiles, distFilesDigest, singleConsole.getAgentCachedDistFilesDigestList());
+		deleteCachedDistFiles(distDir, distFiles, distFilesDigest, singleConsole.getAgentCachedDistFilesDigestList());
 	}
 
 	/**
@@ -386,7 +388,7 @@ public class PerfTestRunnable implements ControllerConstants {
 	 */
 	void runTestOn(final PerfTest perfTest, GrinderProperties grinderProperties, final SingleConsole singleConsole) {
 		// start target monitor
-		for (OnTestLifeCycleRunnable run : pluginManager.getEnabledModulesByClass(OnTestLifeCycleRunnable.class)) {
+		for (OnTestLifeCycleRunnable run : pluginManager.getEnabledModulesByClass(OnTestLifeCycleRunnable.class, getDefaultTestLifeCyclePlugins())) {
 			run.start(perfTest, perfTestService, config.getVersion());
 		}
 
@@ -431,9 +433,13 @@ public class PerfTestRunnable implements ControllerConstants {
 	 * @see OnTestLifeCycleRunnable
 	 */
 	public void notifyFinish(PerfTest perfTest, StopReason reason) {
-		for (OnTestLifeCycleRunnable run : pluginManager.getEnabledModulesByClass(OnTestLifeCycleRunnable.class)) {
+		for (OnTestLifeCycleRunnable run : pluginManager.getEnabledModulesByClass(OnTestLifeCycleRunnable.class, getDefaultTestLifeCyclePlugins())) {
 			run.finish(perfTest, reason.name(), perfTestService, config.getVersion());
 		}
+	}
+
+	private List<OnTestLifeCycleRunnable> getDefaultTestLifeCyclePlugins() {
+		return ImmutableList.of(new NGrinderWebhookPlugin(webhookService, webhookConfigService));
 	}
 
 	/**
