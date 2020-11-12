@@ -151,6 +151,7 @@ public class ConsoleManager {
 						consoleCommunicationSetting, baseConsoleProperties);
 				getConsoleInUse().add(singleConsole);
 				singleConsole.setCsvSeparator(config.getCsvSeparator());
+				singleConsole.setTooLowTpsTime(config.getTooLowTpsTime());
 				return singleConsole;
 			}
 		} catch (Exception e) {

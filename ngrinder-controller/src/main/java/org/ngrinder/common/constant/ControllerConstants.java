@@ -45,6 +45,7 @@ public interface ControllerConstants {
 	String PROP_CONTROLLER_DEFAULT_LANG = "controller.default_lang";
 	String PROP_CONTROLLER_DEMO_MODE = "controller.demo_mode";
 	String PROP_CONTROLLER_DEV_MODE = "controller.dev_mode";
+	String PROP_CONTROLLER_TOO_LOW_TPS_TIME = "controller.too_low_tps_time";
 	String PROP_CONTROLLER_DIST_LOGBACK = "controller.dist_logback";
 	String PROP_CONTROLLER_FRONT_PAGE_ENABLED = "controller.front_page_enabled";
 	String PROP_CONTROLLER_FRONT_PAGE_ASK_QUESTION_URL = "controller.front_page_ask_question_url";

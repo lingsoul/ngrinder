@@ -148,6 +148,11 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
      * cvs file Separator value.
      */
 	private String cvsSeparator = ",";
+
+	/**
+	 * set tooLowTpsTime value.
+	 */
+	private int tooLowTpsTime = 60000;
 	/**
 	 * Constructor to bind all ip and the given port.
 	 * <p/>
@@ -771,9 +776,9 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 		if (tps < 0.001) {
 			if (momentWhenTpsBeganToHaveVerySmall == 0) {
 				momentWhenTpsBeganToHaveVerySmall = System.currentTimeMillis();
-			} else if (new Date().getTime() - momentWhenTpsBeganToHaveVerySmall >= TOO_LOW_TPS_TIME) {
+			} else if (new Date().getTime() - momentWhenTpsBeganToHaveVerySmall >= tooLowTpsTime) {
 				LOGGER.warn("Stop the test because its tps is less than 0.001 for more than {} minitue.",
-						TOO_LOW_TPS_TIME / 60000);
+					tooLowTpsTime / 60000);
 				getListeners().apply(listener -> {
 					listener.readyToStop(StopReason.TOO_LOW_TPS);
 				});
@@ -1319,5 +1324,14 @@ public class SingleConsole extends AbstractSingleConsole implements Listener, Sa
 	 */
 	public void setCsvSeparator(String csvSeparator){
 		this.cvsSeparator = csvSeparator;
+	}
+
+	/*
+	 * set TooLowTpsTime.
+	 *
+	 * @param int tooLowTpsTime
+	 */
+	public void setTooLowTpsTime(int tooLowTpsTime){
+		this.tooLowTpsTime = tooLowTpsTime;
 	}
 }

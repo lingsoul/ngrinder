@@ -485,6 +485,10 @@ public class Config extends AbstractConfig implements ControllerConstants, Clust
 		return getControllerProperties().getPropertyBoolean(PROP_CONTROLLER_DEV_MODE);
 	}
 
+	public int getTooLowTpsTime() {
+		return getControllerProperties().getPropertyInt(PROP_CONTROLLER_TOO_LOW_TPS_TIME);
+	}
+
 	/**
 	 * Check if the user security is enabled.
 	 *

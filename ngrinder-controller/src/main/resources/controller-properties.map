@@ -1,5 +1,6 @@
 controller.verbose,false,verbose
 controller.dev_mode,false,testmode
+controller.too_low_tps_time,60000
 controller.demo_mode,false,demo
 controller.security,false,security
 controller.security.level,normal,
