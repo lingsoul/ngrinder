@@ -18,7 +18,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import freemarker.template.Configuration;
 import freemarker.template.DefaultObjectWrapper;
 import freemarker.template.Template;
+import freemarker.template.TemplateNotFoundException;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang.StringUtils;
 import org.ngrinder.common.constant.ControllerConstants;
@@ -26,14 +28,13 @@ import org.ngrinder.common.exception.NGrinderRuntimeException;
 import org.ngrinder.common.exception.PerfTestPrepareException;
 import org.ngrinder.common.util.PathUtils;
 import org.ngrinder.common.util.PropertiesWrapper;
+import org.ngrinder.infra.config.Config;
 import org.ngrinder.model.PerfTest;
 import org.ngrinder.model.User;
 import org.ngrinder.script.model.FileEntry;
 import org.ngrinder.script.model.FileType;
 import org.ngrinder.script.repository.FileEntryRepository;
 import org.ngrinder.script.repository.GitHubFileEntryRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.File;
@@ -58,12 +59,14 @@ import static org.ngrinder.common.util.LoggingUtils.format;
  * @since 3.2
  */
 @Getter
+@Slf4j
 public abstract class ScriptHandler implements ControllerConstants {
-	protected static final Logger LOGGER = LoggerFactory.getLogger(JythonScriptHandler.class);
+
 	private final String codemirrorKey;
 	private final String title;
 	private final String extension;
 	private final String key;
+	private final boolean creatable;
 
 	/**
 	 * Constructor.
@@ -73,11 +76,12 @@ public abstract class ScriptHandler implements ControllerConstants {
 	 * @param title         title of the handler
 	 * @param codeMirrorKey code mirror key
 	 */
-	public ScriptHandler(String key, String extension, String title, String codeMirrorKey) {
+	public ScriptHandler(String key, String extension, String title, String codeMirrorKey, boolean creatable) {
 		this.key = key;
 		this.extension = extension;
 		this.title = title;
 		this.codemirrorKey = codeMirrorKey;
+		this.creatable = creatable;
 	}
 
 	@Autowired
@@ -87,6 +91,10 @@ public abstract class ScriptHandler implements ControllerConstants {
 	@Autowired
 	@JsonIgnore
 	private GitHubFileEntryRepository gitHubFileEntryRepository;
+
+	@Autowired
+	@JsonIgnore
+	private Config config;
 
 	/**
 	 * Get the display order of {@link ScriptHandler}s.
@@ -162,7 +170,7 @@ public abstract class ScriptHandler implements ControllerConstants {
 				}
 				File toDir = new File(distDir, calcDistSubPath(basePath, each));
 				processingResult.printf("%s is being written.\n", each.getPath());
-				LOGGER.info(format(perfTest, "{} is being written in {}", each.getPath(), toDir));
+				log.info(format(perfTest, "{} is being written in {}", each.getPath(), toDir));
 				if (isGitHubFileEntry(each)) {
 					gitHubFileEntryRepository.writeContentTo(each.getPath(), toDir);
 				} else {
@@ -258,9 +266,9 @@ public abstract class ScriptHandler implements ControllerConstants {
 		}
 
 		for (FileEntry eachFileEntry : libFileEntries) {
-			// Skip jython 2.5... it's already included.
-			if (startsWithIgnoreCase(eachFileEntry.getFileName(), "jython-2.5.")
-					|| startsWithIgnoreCase(eachFileEntry.getFileName(), "jython-standalone-2.5.")) {
+			// Skip jython 2.7... it's already included.
+			if (startsWithIgnoreCase(eachFileEntry.getFileName(), "jython-2.7.")
+					|| startsWithIgnoreCase(eachFileEntry.getFileName(), "jython-standalone-2.7.")) {
 				continue;
 			}
 			FileType fileType = eachFileEntry.getFileType();
@@ -325,11 +333,12 @@ public abstract class ScriptHandler implements ControllerConstants {
 	 * @return generated string
 	 */
 	public String getScriptTemplate(Map<String, Object> values) {
+		String templateFileName = "basic_template_" + getExtension() + ".ftl";
 		try {
 			Configuration freemarkerConfig = new Configuration(DEFAULT_INCOMPATIBLE_IMPROVEMENTS);
 			freemarkerConfig.setObjectWrapper(new DefaultObjectWrapper(DEFAULT_INCOMPATIBLE_IMPROVEMENTS));
-			freemarkerConfig.setClassForTemplateLoading(this.getClass() , "/script_template");
-			Template template = freemarkerConfig.getTemplate("basic_template_" + getExtension() + ".ftl");
+			freemarkerConfig.setDirectoryForTemplateLoading(config.getHomeScriptTemplateDirectory());
+			Template template = freemarkerConfig.getTemplate(templateFileName);
 			StringWriter writer = new StringWriter();
 			template.process(values, writer);
 			return writer.toString();
